@@ -1,0 +1,5 @@
+{
+  "name": "Copy of Q7 Values Profile 202509252107",
+  "description": "An application that builds a person's values profile based on their answers to 7 A/B-type questions and visualizes it as a radar chart and a unique star on a collective map.",
+  "requestFramePermissions": []
+}
