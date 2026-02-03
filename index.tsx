@@ -1056,6 +1056,8 @@ const App = () => {
         // ============================================================================
         // CALL CLOUD FUNCTION INSTEAD OF LOCAL CALCULATION
         // ============================================================================
+        let profileCode, profileId, rankedScores, starCoords, docRef;
+
         try {
             // Call processQ7Assessment Cloud Function
             const processQ7 = firebase.functions().httpsCallable('processQ7Assessment');
@@ -1065,19 +1067,10 @@ const App = () => {
                 userId: userToSave?.uid || null,
             });
 
-            const { profileCode, profileId, rankedScores, starCoords } = result.data;
-
-            // Store profile data in state for display
-            const profileData = {
-                profileCode,
-                rankedScores,
-                starCoords,
-                answers: answersToSave,
-                optionalInfo: sanitizedInfo,
-            };
+            ({ profileCode, profileId, rankedScores, starCoords } = result.data);
 
             // Set docRef for compatibility with existing code
-            const docRef = { id: profileId };
+            docRef = { id: profileId };
             console.log('Profile saved successfully with ID:', docRef.id);
 
         } catch (error) {
