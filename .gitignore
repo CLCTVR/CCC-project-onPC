@@ -4,3 +4,13 @@ dist/
 .firebase/
 service-account-key.json
 package-lock.json
+
+# Cloud Functions
+functions/node_modules/
+functions/.env
+functions/lib/
+*.log
+
+# Temporary files
+*.docx
+temp_*.txt
