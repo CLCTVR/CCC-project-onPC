@@ -75,12 +75,8 @@ const QUESTIONS = [
     { q: "Would your Best Friend rather go on an adventure - or enjoy a safe trip?", a: "Adventure", b: "Safe trip" }
 ];
 
-// The primary order of values, clockwise starting from the top-right.
+// VALUE_LABELS kept for chart display only (no calculations)
 const VALUE_LABELS = ['UN', 'BE', 'TC', 'SE', 'PO', 'AC', 'HE', 'ST', 'SD'];
-
-// Angles in degrees for each value, corresponding to VALUE_LABELS. 0 degrees is right, counter-clockwise.
-const ANGLES_DEG = [70, 30, 350, 310, 270, 230, 190, 150, 110];
-const VALUE_ANGLES = ANGLES_DEG.map(deg => deg * (Math.PI / 180)); // Convert to radians
 
 // Define basic interfaces for Chart.js to improve type safety
 interface ChartJsInstance {
@@ -99,97 +95,15 @@ declare global {
     }
 }
 
-const calculateProfile = (answers: number[]) => {
-    const [q1, q2, q3, q4, q5, q6, q7] = answers;
-
-    // Raw score calculations based on provided formulas
-    const rawScores = {
-        UN: (100 - q1 + 100 - q2) / 2,
-        BE: q3,
-        TC: (100 - q5 + q4) / 2,
-        SE: (q6 + q7) / 2,
-        PO: q1,
-        AC: (q2 + 100 - q3) / 2,
-        HE: (100 - q4),
-        ST: (q5 + 100 - q7) / 2,
-        SD: (100 - q6)
-    };
-
-    // Build the scores array in the same sequential order as VALUE_LABELS
-    const scoresArray = VALUE_LABELS.map(label => rawScores[label as keyof typeof rawScores]);
-
-    // Ranking logic: scale scores from 1 to 10
-    const minScore = Math.min(...scoresArray);
-    const maxScore = Math.max(...scoresArray);
-
-    const rankedScores = scoresArray.map(score => {
-        if (maxScore === minScore) return 5.5; // Handle edge case where all scores are equal
-        return 1 + 9 * (score - minScore) / (maxScore - minScore);
-    });
-
-    // Calculate "vector of vectors" for the star position
-    let totalX = 0;
-    let totalY = 0;
-
-    rankedScores.forEach((magnitude, i) => {
-        const angle = VALUE_ANGLES[i];
-        totalX += magnitude * Math.cos(angle);
-        totalY += magnitude * Math.sin(angle);
-    });
-
-    return {
-        rankedScores,
-        starCoords: { x: totalX, y: totalY }
-    };
-};
-
-const generateProfileCode = (rankedScores: number[]) => {
-    // 1. Combine labels and scores
-    const scoresWithLabels = VALUE_LABELS.map((label, index) => ({
-        label,
-        score: rankedScores[index]
-    }));
-
-    // 2. Sort by score in descending order to determine rank
-    scoresWithLabels.sort((a, b) => b.score - a.score);
-
-    // 3. Create a map of label to its rank (1-9)
-    const rankMap = new Map<string, number>();
-    scoresWithLabels.forEach((item, index) => {
-        rankMap.set(item.label, index + 1);
-    });
-
-    // 4. Build the final string based on the primary clockwise order (VALUE_LABELS)
-    return VALUE_LABELS.map(label => rankMap.get(label)).join('');
-};
-// --- End of merged logic ---
-
-/**
- * Calculates the Profile Distortion Index.
- * Measures the average absolute difference between consecutive Q7 dimension values.
- * Lower values indicate smoother, more consistent profiles.
- * Higher values suggest potentially unreliable or thoughtless answers.
- * 
- * Formula: Average of |UN-SD|, |BE-UN|, |TC-BE|, |SE-TC|, |PO-SE|, |AC-PO|, |HE-AC|, |ST-HE|, |SD-ST|
- * 
- * Theoretical range: 0-9 (but typically 2-6 in practice)
- * 
- * @param rankedScores - Array of 9 Q7 dimension scores in VALUE_LABELS order (1-10 range)
- * @returns Profile Distortion Index (typically 2-6)
- */
-const calculateProfileDistortion = (rankedScores: number[]): number => {
-    // Calculate absolute differences between consecutive values (forming a circle)
-    const differences: number[] = [];
-    for (let i = 0; i < rankedScores.length; i++) {
-        const current = rankedScores[i];
-        const next = rankedScores[(i + 1) % rankedScores.length]; // Wrap around to form circle
-        differences.push(Math.abs(current - next));
-    }
-    // Return the average of all differences
-    const sum = differences.reduce((acc, val) => acc + val, 0);
-    const average = sum / differences.length;
-    return Number(average.toFixed(2)); // Round to 2 decimal places
-};
+// ============================================================================
+// PROPRIETARY CALCULATIONS REMOVED - NOW HANDLED BY CLOUD FUNCTIONS
+// ============================================================================
+// The following functions have been migrated to Firebase Cloud Functions:
+// - calculateProfile() -> processQ7Assessment Cloud Function
+// - generateProfileCode() -> processQ7Assessment Cloud Function
+// - calculateProfileDistortion() -> processQ7Assessment Cloud Function
+//
+// This protects intellectual property from browser-based reverse engineering.
 
 type Screen = 'welcome' | 'questionnaire' | 'optionalInfo' | 'results' | 'auth' | 'error';
 type OptionalInfo = {
@@ -914,10 +828,12 @@ const App = () => {
                 const profileDoc = await db.collection('profiles').doc(activeProfile.id).get();
                 if (profileDoc.exists) {
                     const activeProfileData = profileDoc.data();
-                    const finalProfile = calculateProfile(activeProfileData.answers);
-                    // Use the stored profile code directly from DB
-                    const code = activeProfileData.profileCode;
-                    setProfileData({ ...finalProfile, profileCode: code });
+                    // Use stored values from database (no recalculation needed)
+                    setProfileData({
+                        rankedScores: activeProfileData.rankedScores,
+                        starCoords: activeProfileData.starCoords,
+                        profileCode: activeProfileData.profileCode
+                    });
                     setOptionalInfo(activeProfileData.optionalInfo || { name: '', birthYear: '', education: '', source: '', teamCode: '' });
                     setProfileInfo({ id: activeProfile.id, createdAt: activeProfile.createdAt });
                     setScreen('results');
@@ -989,10 +905,12 @@ const App = () => {
                             const activeProfile = userProfiles.find(p => p.isArchived !== true);
 
                             if (activeProfile) {
-                                const finalProfile = calculateProfile(activeProfile.answers);
-                                // Use the stored profile code directly from DB
-                                const code = activeProfile.profileCode;
-                                setProfileData({ ...finalProfile, profileCode: code });
+                                // Use stored values from database (no recalculation needed)
+                                setProfileData({
+                                    rankedScores: activeProfile.rankedScores,
+                                    starCoords: activeProfile.starCoords,
+                                    profileCode: activeProfile.profileCode
+                                });
                                 // Defensively set optionalInfo to prevent crashes if it's missing
                                 setOptionalInfo(activeProfile.optionalInfo || { name: '', birthYear: '', education: '', source: '', teamCode: '' });
                                 setProfileInfo({ id: activeProfile.id, createdAt: activeProfile.createdAt });
@@ -1135,29 +1053,31 @@ const App = () => {
             teamCode: infoToSave.teamCode ? infoToSave.teamCode.trim().toUpperCase() : '',
         };
 
-        const finalProfile = calculateProfile(answersToSave);
-        const profileCode = generateProfileCode(finalProfile.rankedScores);
-        const profileDistor = calculateProfileDistortion(finalProfile.rankedScores);
-        const payload: any = {
-            profileCode,
-            profileDistor,
-            rankedScores: finalProfile.rankedScores,
-            starCoords: finalProfile.starCoords,
-            answers: answersToSave,
-            optionalInfo: sanitizedInfo,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            isArchived: options.forceArchive || false,
-        };
-        if (userToSave) {
-            payload.userId = userToSave.uid;
-            // Defensively set to null if email is missing to ensure the field is created in Firestore
-            payload.userEmail = userToSave.email || null;
-        }
-
-        let docRef;
+        // ============================================================================
+        // CALL CLOUD FUNCTION INSTEAD OF LOCAL CALCULATION
+        // ============================================================================
         try {
-            // --- Step 1: Attempt to save the new profile. This is the critical step. ---
-            docRef = await db.collection('profiles').add(payload);
+            // Call processQ7Assessment Cloud Function
+            const processQ7 = firebase.functions().httpsCallable('processQ7Assessment');
+            const result = await processQ7({
+                answers: answersToSave,
+                optionalInfo: sanitizedInfo,
+                userId: userToSave?.uid || null,
+            });
+
+            const { profileCode, profileId, rankedScores, starCoords } = result.data;
+
+            // Store profile data in state for display
+            const profileData = {
+                profileCode,
+                rankedScores,
+                starCoords,
+                answers: answersToSave,
+                optionalInfo: sanitizedInfo,
+            };
+
+            // Set docRef for compatibility with existing code
+            const docRef = { id: profileId };
             console.log('Profile saved successfully with ID:', docRef.id);
 
         } catch (error) {
@@ -1169,32 +1089,20 @@ const App = () => {
 
         // --- Step 2: If the profile was NOT force-archived, update the UI. ---
         if (!options.forceArchive) {
-            setProfileData({ ...finalProfile, profileCode }); // Ensure code is set locally
+            setProfileData({ rankedScores, starCoords, profileCode });
             setOptionalInfo(sanitizedInfo);
             if (userToSave) {
-                setProfileInfo({ id: docRef.id, createdAt: new Date() }); // Use client date for immediate UI feedback.
+                setProfileInfo({ id: docRef.id, createdAt: new Date() });
             }
             setScreen('results');
         }
-        setIsSaving(false); // Make sure this is always called
+        setIsSaving(false);
 
-        // --- Step 3: Trigger background task to save public, anonymous star data. ---
-        // This is a client-side "double write". In a production system, this would
-        // ideally be a Cloud Function triggered by the creation of the profile document.
-        try {
-            await db.collection('publicStars').add({
-                starCoords: finalProfile.starCoords,
-                teamCode: sanitizedInfo.teamCode || null,
-                userId: userToSave?.uid || null,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-            console.log('Public star data saved successfully.');
-        } catch (error) {
-            console.warn('Could not save public star data. The main profile was saved.', error);
-        }
+        // --- Step 3: Public star data is now handled by Cloud Function ---
+        // The processQ7Assessment Cloud Function writes to publicStars collection
+        // No client-side double write needed
 
-        // --- Step 4: If this is a NEW ACTIVE profile, trigger background task to clean up old profiles. ---
-        // This is "fire and forget". It won't block the UI or show errors to the user.
+        // --- Step 4: Archive old profiles (background task) ---
         if (userToSave && !options.forceArchive) {
             archiveOldProfiles(userToSave.uid, docRef.id);
         }
