@@ -1,0 +1,114 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ============================================================================
+    // ADMIN EXCEPTION: Full access for Q7-Admin CSV import
+    // ============================================================================
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email == 'clctvr@gmail.com';
+    }
+    
+    // ============================================================================
+    // PROFILES COLLECTION
+    // ============================================================================
+    match /profiles/{profileId} {
+      // Admin: Full access
+      allow read, write: if isAdmin();
+      
+      // Helper function for ownership
+      function isOwner() {
+        return request.auth != null && (request.auth.uid == resource.data.userId || request.auth.uid == profileId);
+      }
+
+      // Read permissions: Allow single doc reads and limited queries
+      allow get: if request.auth != null;
+      
+      // Allow queries with small limits (for Q7-FIKA Map) OR user's own data (for Q7-PWA)
+      allow list: if request.auth != null && (
+        request.query.limit <= 30 || 
+        resource.data.userId == request.auth.uid
+      );
+
+      // ============================================================================
+      // WRITE PERMISSIONS: BLOCKED FOR IP PROTECTION
+      // ============================================================================
+      // NO client-side profile creation - must use processQ7Assessment Cloud Function
+      // This prevents exposure of calculateProfile, generateProfileCode algorithms
+      allow create: if false;
+      
+      // NO client-side updates/deletes - profiles are immutable after Cloud Function creation
+      allow update, delete: if false;
+    }
+    
+    // ============================================================================
+    // VENUES COLLECTION
+    // ============================================================================
+    match /venues/{venueId} {
+      // Admin: Full access
+      allow read, write: if isAdmin();
+      
+      // Anyone can read venues (for map display)
+      allow read: if true;
+      
+      // Authenticated users can create new venues (discovery feature)
+      allow create: if request.auth != null;
+      
+      // ============================================================================
+      // WRITE PERMISSIONS: RESTRICTED FOR IP PROTECTION
+      // ============================================================================
+      // Allow ONLY visitCount increments (for check-in logging)
+      // NO rankedScores or profileCode updates from client
+      // These must go through updateVenueProfile Cloud Function
+      allow update: if request.auth != null 
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['visitCount', 'lastUpdated'])
+                    && request.resource.data.visitCount is number;
+      
+      // Admin can delete
+      allow delete: if isAdmin();
+    }
+    
+    // ============================================================================
+    // VISITS COLLECTION
+    // ============================================================================
+    match /visits/{visitId} {
+      // Admin: Full access
+      allow read, write: if isAdmin();
+      
+      // Users can read all visits (needed for venue profiling queries)
+      allow read: if request.auth != null;
+      
+      // Users can create visits (check-ins)
+      allow create: if request.auth != null;
+      
+      // No updates or deletes
+      allow update, delete: if false;
+    }
+    
+    // ============================================================================
+    // PUBLIC STARS COLLECTION (for StarMap visualization)
+    // ============================================================================
+    match /publicStars/{starId} {
+      // Admin: Full access
+      allow read, write: if isAdmin();
+      
+      // Anyone can read (for map display)
+      allow read: if true;
+      
+      // ============================================================================
+      // WRITE PERMISSIONS: BLOCKED FOR IP PROTECTION
+      // ============================================================================
+      // NO client-side writes - handled by processQ7Assessment Cloud Function
+      // This prevents exposure of starCoords calculation
+      allow create: if false;
+      allow update, delete: if false;
+    }
+    
+    // ============================================================================
+    // DEFAULT DENY ALL (for any other collections)
+    // ============================================================================
+    match /{document=**} {
+      allow read, write: if isAdmin();
+    }
+  }
+}
