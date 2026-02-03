@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
+import logoSrc from './assets/logo.png';
+import StarIcon from './assets/icon-star.svg?react';
 
 // Firebase is loaded globally via <script> tags in index.html
 declare const firebase: any;
@@ -15,30 +17,45 @@ const PROFILE_CREATION_COOLDOWN_HOURS = 720; // 30 days
 // --- Firebase Initialization ---
 // The firebaseConfig object is now loaded from `firebase-config.js` into window.firebaseConfig
 // This prevents API keys from being committed to source control.
+
+// --- PASTE THIS NEW BLOCK ---
+
+// Fix for missing types when vite/client reference fails
 declare global {
-    interface Window {
-        firebaseConfig?: {
-            apiKey: string;
-            authDomain: string;
-            projectId: string;
-            storageBucket: string;
-            messagingSenderId: string;
-            appId: string;
-            measurementId: string;
-        };
+    interface ImportMetaEnv {
+        readonly VITE_FIREBASE_API_KEY: string;
+        readonly VITE_FIREBASE_AUTH_DOMAIN: string;
+        readonly VITE_FIREBASE_PROJECT_ID: string;
+        readonly VITE_FIREBASE_STORAGE_BUCKET: string;
+        readonly VITE_FIREBASE_MESSAGING_SENDER_ID: string;
+        readonly VITE_FIREBASE_APP_ID: string;
+        readonly VITE_FIREBASE_MEASUREMENT_ID: string;
+        [key: string]: any;
+    }
+    interface ImportMeta {
+        readonly env: ImportMetaEnv;
     }
 }
 
-if (!window.firebaseConfig || window.firebaseConfig.apiKey === "PASTE_YOUR_FIREBASE_WEB_API_KEY_HERE") {
-    alert("CRITICAL: Firebase configuration is missing or incomplete. Please create or update 'firebase-config.js' with your Firebase project details.");
-    throw new Error("Firebase config not found or API Key not configured in firebase-config.js");
-}
-
+// Construct the Firebase config object from environment variables
+const firebaseConfig = {
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID,
+    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
+};
 
 // Initialize Firebase
 if (!firebase.apps.length) {
-    firebase.initializeApp(window.firebaseConfig);
+    firebase.initializeApp(firebaseConfig);
 }
+
+// --- END OF NEW BLOCK ---
+
+
 // CRITICAL: Ensure you have configured Firestore Security Rules in the Firebase console
 // to prevent unauthorized access to your data. Your rules should ensure users can
 // only read and write their own profile data.
@@ -49,81 +66,81 @@ const auth = firebase.auth();
 
 // --- Logic from questions.ts merged directly into this file ---
 const QUESTIONS = [
-  { q: "Would your BEST TEAMMATE rather join Green Peace or the White House staff?", a: "Green Peace", b: "White House staff" },
-  { q: "Would your BEST TEAMMATE rather fight climate change or compete for the Nobel Prize?", a: "Fight climate change", b: "Nobel Prize" },
-  { q: "Would your BEST TEAMMATE rather win the Olympics or coach the local soccer team?", a: "Win the Olympics", b: "Coach local team" },
-  { q: "Would your BEST TEAMMATE rather enjoy speeding or respect the posted speed limit?", a: "Enjoy speeding", b: "Respect speed limit" },
-  { q: "Would your BEST TEAMMATE rather attend church or go bungee jumping?", a: "Attend church", b: "Bungee jumping" },
-  { q: "Would your BEST TEAMMATE rather prefer freelance or a steady 9-to-5 job?", a: "Freelance", b: "Steady 9-to-5" },
-  { q: "Would your BEST TEAMMATE rather prefer an adventure or a safe trip?", a: "An adventure", b: "A safe trip" }
+    { q: "Would your Best Friend rather work for a charity - or lead a successful company?", a: "Work for charity", b: "Lead a company" },
+    { q: "Would your Best Friend rather end world poverty - or receive the Nobel Prize?", a: "End poverty", b: "Receive the Nobel" },
+    { q: "Would your Best Friend rather win Gold at the Olympics - or coach the local soccer team?", a: "Win Gold", b: "Coach local team" },
+    { q: "Would your Best Friend rather dress for comfort - or dress appropriately?", a: "Dress for comfort", b: "Dress appropriately" },
+    { q: "Would your Best Friend rather attend a religious service - or go bungee jumping?", a: "Attend church", b: "Bungee jumping" },
+    { q: "Would your Best Friend rather freelance - or work a steady 9-to-5 job?", a: "Freelance", b: "Steady 9-to-5" },
+    { q: "Would your Best Friend rather go on an adventure - or enjoy a safe trip?", a: "Adventure", b: "Safe trip" }
 ];
 
 // The primary order of values, clockwise starting from the top-right.
 const VALUE_LABELS = ['UN', 'BE', 'TC', 'SE', 'PO', 'AC', 'HE', 'ST', 'SD'];
 
 // Angles in degrees for each value, corresponding to VALUE_LABELS. 0 degrees is right, counter-clockwise.
-const ANGLES_DEG = [70, 30, 350, 310, 270, 230, 190, 110, 150];
+const ANGLES_DEG = [70, 30, 350, 310, 270, 230, 190, 150, 110];
 const VALUE_ANGLES = ANGLES_DEG.map(deg => deg * (Math.PI / 180)); // Convert to radians
 
 // Define basic interfaces for Chart.js to improve type safety
 interface ChartJsInstance {
-  destroy: () => void;
+    destroy: () => void;
 }
 interface ChartJsConfig {
-  type: 'radar';
-  data: any;
-  options: any;
+    type: 'radar';
+    data: any;
+    options: any;
 }
 declare global {
-  interface Window {
-    Chart: {
-      new (context: CanvasRenderingContext2D, config: ChartJsConfig): ChartJsInstance;
-    };
-  }
+    interface Window {
+        Chart: {
+            new(context: CanvasRenderingContext2D, config: ChartJsConfig): ChartJsInstance;
+        };
+    }
 }
 
 const calculateProfile = (answers: number[]) => {
-  const [q1, q2, q3, q4, q5, q6, q7] = answers;
+    const [q1, q2, q3, q4, q5, q6, q7] = answers;
 
-  // Raw score calculations based on provided formulas
-  const rawScores = {
-    UN: (101 - q1 + 101 - q2) / 2,
-    BE: q3,
-    TC: (101 - q5 + q4) / 2,
-    SE: (q6 + q7) / 2,
-    PO: q1,
-    AC: (q2 + 101 - q3) / 2,
-    HE: (101 - q4),
-    ST: (q5 + 101 - q7) / 2,
-    SD: (101 - q6)
-  };
+    // Raw score calculations based on provided formulas
+    const rawScores = {
+        UN: (100 - q1 + 100 - q2) / 2,
+        BE: q3,
+        TC: (100 - q5 + q4) / 2,
+        SE: (q6 + q7) / 2,
+        PO: q1,
+        AC: (q2 + 100 - q3) / 2,
+        HE: (100 - q4),
+        ST: (q5 + 100 - q7) / 2,
+        SD: (100 - q6)
+    };
 
-  // Build the scores array in the same sequential order as VALUE_LABELS
-  const scoresArray = VALUE_LABELS.map(label => rawScores[label as keyof typeof rawScores]);
+    // Build the scores array in the same sequential order as VALUE_LABELS
+    const scoresArray = VALUE_LABELS.map(label => rawScores[label as keyof typeof rawScores]);
 
-  // Ranking logic: scale scores from 1 to 10
-  const minScore = Math.min(...scoresArray);
-  const maxScore = Math.max(...scoresArray);
-  
-  const rankedScores = scoresArray.map(score => {
-    if (maxScore === minScore) return 5.5; // Handle edge case where all scores are equal
-    return 1 + 9 * (score - minScore) / (maxScore - minScore);
-  });
+    // Ranking logic: scale scores from 1 to 10
+    const minScore = Math.min(...scoresArray);
+    const maxScore = Math.max(...scoresArray);
 
-  // Calculate "vector of vectors" for the star position
-  let totalX = 0;
-  let totalY = 0;
-  
-  rankedScores.forEach((magnitude, i) => {
-    const angle = VALUE_ANGLES[i];
-    totalX += magnitude * Math.cos(angle);
-    totalY += magnitude * Math.sin(angle);
-  });
+    const rankedScores = scoresArray.map(score => {
+        if (maxScore === minScore) return 5.5; // Handle edge case where all scores are equal
+        return 1 + 9 * (score - minScore) / (maxScore - minScore);
+    });
 
-  return {
-    rankedScores,
-    starCoords: { x: totalX, y: totalY }
-  };
+    // Calculate "vector of vectors" for the star position
+    let totalX = 0;
+    let totalY = 0;
+
+    rankedScores.forEach((magnitude, i) => {
+        const angle = VALUE_ANGLES[i];
+        totalX += magnitude * Math.cos(angle);
+        totalY += magnitude * Math.sin(angle);
+    });
+
+    return {
+        rankedScores,
+        starCoords: { x: totalX, y: totalY }
+    };
 };
 
 const generateProfileCode = (rankedScores: number[]) => {
@@ -141,44 +158,72 @@ const generateProfileCode = (rankedScores: number[]) => {
     scoresWithLabels.forEach((item, index) => {
         rankMap.set(item.label, index + 1);
     });
-    
+
     // 4. Build the final string based on the primary clockwise order (VALUE_LABELS)
     return VALUE_LABELS.map(label => rankMap.get(label)).join('');
 };
 // --- End of merged logic ---
 
+/**
+ * Calculates the Profile Distortion Index.
+ * Measures the average absolute difference between consecutive Q7 dimension values.
+ * Lower values indicate smoother, more consistent profiles.
+ * Higher values suggest potentially unreliable or thoughtless answers.
+ * 
+ * Formula: Average of |UN-SD|, |BE-UN|, |TC-BE|, |SE-TC|, |PO-SE|, |AC-PO|, |HE-AC|, |ST-HE|, |SD-ST|
+ * 
+ * Theoretical range: 0-9 (but typically 2-6 in practice)
+ * 
+ * @param rankedScores - Array of 9 Q7 dimension scores in VALUE_LABELS order (1-10 range)
+ * @returns Profile Distortion Index (typically 2-6)
+ */
+const calculateProfileDistortion = (rankedScores: number[]): number => {
+    // Calculate absolute differences between consecutive values (forming a circle)
+    const differences: number[] = [];
+    for (let i = 0; i < rankedScores.length; i++) {
+        const current = rankedScores[i];
+        const next = rankedScores[(i + 1) % rankedScores.length]; // Wrap around to form circle
+        differences.push(Math.abs(current - next));
+    }
+    // Return the average of all differences
+    const sum = differences.reduce((acc, val) => acc + val, 0);
+    const average = sum / differences.length;
+    return Number(average.toFixed(2)); // Round to 2 decimal places
+};
+
 type Screen = 'welcome' | 'questionnaire' | 'optionalInfo' | 'results' | 'auth' | 'error';
 type OptionalInfo = {
-  name: string;
-  birthYear: string;
-  education: string;
-  source: string;
+    name: string;
+    birthYear: string;
+    education: string;
+    source: string;
+    teamCode?: string;
 };
 // Use a generic 'any' type for the user object as we are not importing Firebase types directly.
-type User = any; 
+type User = any;
 type ProfileInfo = { id: string; createdAt: any };
 type StarCoords = { x: number; y: number };
 
 
 // Utility function to shuffle an array
 const shuffleArray = (array: number[]) => {
-  const newArray = [...array];
-  for (let i = newArray.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
-  }
-  return newArray;
+    const newArray = [...array];
+    for (let i = newArray.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+    }
+    return newArray;
 };
 
 const Logo = () => (
-    <img src="assets/logo.png" alt="Collectiver Culture Compass Logo" width="40" height="40" />
+    <img src={logoSrc} alt="Collectiver Culture Compass Logo" width="40" height="40" />
 );
 
 const Header = ({ user, onLogout, onLogin }: { user: User | null; onLogout: () => void; onLogin: () => void; }) => (
     <header className="app-header">
         <div className="header-content">
             <Logo />
-            <h1>Collectiver Culture Compass</h1>
+            <h1>Q7-Lite by Collectiver</h1>
         </div>
         <div className="auth-controls">
             {user && user.emailVerified ? (
@@ -195,9 +240,26 @@ const Header = ({ user, onLogout, onLogin }: { user: User | null; onLogout: () =
 
 const WelcomeScreen = ({ onStart }: { onStart: () => void }) => (
     <div className="screen welcome-screen">
-      <h2>Discover Your Inner Compass</h2>
-      <p>This isn't just a quiz—it's a journey of self-discovery. Answer 7 thought-provoking questions to generate your unique values profile, revealing what truly drives you. See where your star lies in the growing collective map of human values.</p>
-      <button onClick={onStart} className="cta-button">Begin</button>
+        <h2 style={{ marginBottom: '0.25rem' }}>Find Where You Belong</h2>
+        <p style={{ fontWeight: 'normal', marginTop: '0', fontSize: '1.4rem', color: 'white' }}>(in 60 seconds)</p>
+        <p>
+            Think of the one person who really gets you.
+            <br />
+            Whoever comes to mind first, that's the one.
+            <br />
+            Hold that image and answer 7 quick questions
+            <br />
+            for this BEST FRIEND.
+        </p>
+        <button onClick={onStart} className="cta-button">I am ready to answer for my Best Friend</button>
+        <p style={{ fontSize: '0.9em' }}>
+            In a minute, Q7 will map your values and shows where your Star ⭐ fits in the bigger human picture.
+            <br />
+            {' '}
+            <a href="https://truvtus.com/truvtus-science-1/" target="_blank" rel="noopener noreferrer">
+                Why 7 questions? (The Science)
+            </a>
+        </p>
     </div>
 );
 
@@ -215,33 +277,33 @@ const QuestionnaireScreen = ({ currentQuestionIndex, questionOrder, answers, onA
     const value = answers[realQuestionIndex];
 
     return (
-      <div className="screen questionnaire-screen">
-        <div className="content-card">
-          <p className="progress-indicator">Question {currentQuestionIndex + 1} of {QUESTIONS.length}</p>
-          <h2 className="question-text">{question.q}</h2>
-          <div className="slider-container">
-            <div className="slider-labels">
-              <span className="label-a">{question.a}</span>
-              <span className="label-b">{question.b}</span>
+        <div className="screen questionnaire-screen">
+            <div className="content-card">
+                <p className="progress-indicator">Question {currentQuestionIndex + 1} of {QUESTIONS.length}</p>
+                <h2 className="question-text">{question.q}</h2>
+                <div className="slider-container">
+                    <div className="slider-labels">
+                        <span className="label-a">{question.a}</span>
+                        <span className="label-b">{question.b}</span>
+                    </div>
+                    <input
+                        type="range"
+                        min="1"
+                        max="100"
+                        value={value}
+                        onChange={(e) => onAnswerChange(parseInt(e.target.value))}
+                        className="slider"
+                        aria-label="Answer slider"
+                    />
+                </div>
+                <button onClick={onNextQuestion} className="cta-button">
+                    {currentQuestionIndex < QUESTIONS.length - 1 ? 'Continue' : 'Finish Questions'}
+                </button>
             </div>
-            <input
-              type="range"
-              min="1"
-              max="100"
-              value={value}
-              onChange={(e) => onAnswerChange(parseInt(e.target.value))}
-              className="slider"
-              aria-label="Answer slider"
-            />
-          </div>
-          <button onClick={onNextQuestion} className="cta-button">
-            {currentQuestionIndex < QUESTIONS.length - 1 ? 'Continue' : 'Finish Questions'}
-          </button>
         </div>
-      </div>
     );
 };
-  
+
 type OptionalInfoScreenProps = {
     optionalInfo: OptionalInfo;
     isSaving: boolean;
@@ -252,62 +314,73 @@ type OptionalInfoScreenProps = {
 
 const OptionalInfoScreen = ({ optionalInfo, isSaving, onInfoChange, onSubmit, showAuthWarning }: OptionalInfoScreenProps) => (
     <div className="screen optional-info-screen">
-      <div className="content-card">
-        <h2>Optional Information</h2>
-        <p>This helps us build a more accurate collective map. All data is anonymous.</p>
-        <form className="optional-form">
-          <label htmlFor="name">Your Name (Optional)</label>
-          <input
-            type="text"
-            name="name"
-            id="name"
-            placeholder="Enter your name or a nickname"
-            value={optionalInfo.name}
-            onChange={onInfoChange}
-            disabled={isSaving}
-          />
-        
-          <label htmlFor="birthYear">Birth Year Range</label>
-          <select name="birthYear" id="birthYear" value={optionalInfo.birthYear} onChange={onInfoChange} disabled={isSaving}>
-            <option value="">Select...</option>
-            <option value="<1960">&lt;1960</option>
-            <option value="1960-1979">1960-1979</option>
-            <option value="1980-1999">1980-1999</option>
-            <option value="2000+">2000+</option>
-          </select>
+        <div className="content-card">
+            <h2>Optional Information</h2>
+            <p>This helps us build a more accurate collective map. All data is anonymous.</p>
+            <form className="optional-form">
+                <label htmlFor="name">Your Name (Optional)</label>
+                <input
+                    type="text"
+                    name="name"
+                    id="name"
+                    placeholder="Enter your name or a nickname"
+                    value={optionalInfo.name}
+                    onChange={onInfoChange}
+                    disabled={isSaving}
+                />
 
-          <label htmlFor="education">Education Level</label>
-          <select name="education" id="education" value={optionalInfo.education} onChange={onInfoChange} disabled={isSaving}>
-            <option value="">Select...</option>
-            <option value="high-school">High School</option>
-            <option value="bachelors">Bachelor's Degree</option>
-            <option value="masters">Master's Degree</option>
-            <option value="doctorate">Doctorate</option>
-            <option value="other">Other</option>
-          </select>
+                <label htmlFor="birthYear">Birth Year Range</label>
+                <select name="birthYear" id="birthYear" value={optionalInfo.birthYear} onChange={onInfoChange} disabled={isSaving}>
+                    <option value="">Select...</option>
+                    <option value="<1960">&lt;1960</option>
+                    <option value="1960-1979">1960-1979</option>
+                    <option value="1980-1999">1980-1999</option>
+                    <option value="2000+">2000+</option>
+                </select>
 
-          <label htmlFor="source">How did you hear about us?</label>
-          <select name="source" id="source" value={optionalInfo.source} onChange={onInfoChange} disabled={isSaving}>
-            <option value="">Select...</option>
-            <option value="social-media">Social Media</option>
-            <option value="friend">Friend/Colleague</option>
-            <option value="search-engine">Search Engine</option>
-            <option value="advertisement">Advertisement</option>
-            <option value="other">Other</option>
-          </select>
-        </form>
-         <div className="button-group">
-            <button onClick={onSubmit} className="cta-button" disabled={isSaving}>
-                {isSaving ? 'Saving...' : 'Go to my Profile'}
-            </button>
-            <button onClick={onSubmit} className="skip-button" disabled={isSaving}>
-                Skip for now
-            </button>
+                <label htmlFor="education">Education Level</label>
+                <select name="education" id="education" value={optionalInfo.education} onChange={onInfoChange} disabled={isSaving}>
+                    <option value="">Select...</option>
+                    <option value="high-school">High School</option>
+                    <option value="bachelors">Bachelor's Degree</option>
+                    <option value="masters">Master's Degree</option>
+                    <option value="doctorate">Doctorate</option>
+                    <option value="other">Other</option>
+                </select>
+
+                <label htmlFor="source">How did you hear about us?</label>
+                <select name="source" id="source" value={optionalInfo.source} onChange={onInfoChange} disabled={isSaving}>
+                    <option value="">Select...</option>
+                    <option value="social-media">Social Media</option>
+                    <option value="friend">Friend/Colleague</option>
+                    <option value="search-engine">Search Engine</option>
+                    <option value="advertisement">Advertisement</option>
+                    <option value="other">Other</option>
+                </select>
+
+                <label htmlFor="teamCode">Ref.Code (if provided)</label>
+                <input
+                    type="text"
+                    name="teamCode"
+                    id="teamCode"
+                    placeholder="e.g. ProjectAlpha2024"
+                    value={optionalInfo.teamCode || ''}
+                    onChange={onInfoChange}
+                    disabled={isSaving}
+                />
+            </form>
+            <div className="button-group">
+                <button onClick={onSubmit} className="cta-button" disabled={isSaving}>
+                    {isSaving ? 'Saving...' : 'Go to my Profile'}
+                </button>
+                <button onClick={onSubmit} className="skip-button" disabled={isSaving}>
+                    Skip for now
+                </button>
+            </div>
+            {showAuthWarning && (
+                <p className="auth-warning">You’ll be prompted to register or login on the next page.</p>
+            )}
         </div>
-        {showAuthWarning && (
-            <p className="auth-warning">You’ll be prompted to register or login on the next page.</p>
-        )}
-      </div>
     </div>
 );
 
@@ -379,7 +452,7 @@ const AuthScreen = ({ setAuthError, authError, onBack, onSuccessfulVerifiedLogin
             setIsLoading(false);
         }
     };
-    
+
     const clearState = () => {
         setAuthError('');
         setMessage('');
@@ -416,7 +489,7 @@ const AuthScreen = ({ setAuthError, authError, onBack, onSuccessfulVerifiedLogin
                         disabled={isLoading}
                     />
                     {mode !== 'forgotPassword' && (
-                         <div className="password-input-container">
+                        <div className="password-input-container">
                             <input
                                 type={showPassword ? 'text' : 'password'}
                                 placeholder="Password"
@@ -425,7 +498,7 @@ const AuthScreen = ({ setAuthError, authError, onBack, onSuccessfulVerifiedLogin
                                 required
                                 disabled={isLoading}
                             />
-                             <button
+                            <button
                                 type="button"
                                 onClick={() => setShowPassword(!showPassword)}
                                 className="password-toggle-button"
@@ -435,7 +508,7 @@ const AuthScreen = ({ setAuthError, authError, onBack, onSuccessfulVerifiedLogin
                             </button>
                         </div>
                     )}
-                    
+
                     {authError && <p className="error-message">{authError}</p>}
                     {message && <p className="success-message">{message}</p>}
 
@@ -447,23 +520,23 @@ const AuthScreen = ({ setAuthError, authError, onBack, onSuccessfulVerifiedLogin
                         <button type="submit" className="cta-button" disabled={isLoading}>
                             {isLoading ? 'Processing...' :
                                 mode === 'register' ? 'Sign Up' :
-                                mode === 'login' ? 'Log In' : 'Send Reset Link'}
+                                    mode === 'login' ? 'Log In' : 'Send Reset Link'}
                         </button>
                     )}
                 </form>
 
                 {mode === 'login' && (
-                     <button onClick={() => { setMode('forgotPassword'); clearState(); }} className="link-button" disabled={isLoading}>
+                    <button onClick={() => { setMode('forgotPassword'); clearState(); }} className="link-button" disabled={isLoading}>
                         Forgot Password?
                     </button>
                 )}
 
                 {mode === 'forgotPassword' ? (
-                     <button onClick={() => { setMode('login'); clearState(); }} className="link-button" disabled={isLoading}>
+                    <button onClick={() => { setMode('login'); clearState(); }} className="link-button" disabled={isLoading}>
                         Back to Login
                     </button>
                 ) : (
-                    <button onClick={() => { setMode(mode === 'register' ? 'login' : 'register'); clearState(); }} className="link-button" disabled={isLoading}>
+                    <button onClick={() => { setMode(mode === 'register' ? 'login' : 'register'); clearState(); }} className={`link-button ${mode === 'register' ? 'highlight' : ''}`} disabled={isLoading}>
                         {mode === 'register' ? 'Already have an account? Log In' : "Don't have an account? Sign Up"}
                     </button>
                 )}
@@ -482,85 +555,67 @@ const ErrorScreen = ({ message, onLogout }: { message: string; onLogout: () => v
     </div>
 );
 
-const SharedStarMap = ({ userStarCoords }: { userStarCoords: StarCoords }) => {
-    const [allStars, setAllStars] = useState<StarCoords[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        const fetchStars = async () => {
-            try {
-                // Fetch star coordinates from the publicly accessible 'publicStars' collection.
-                // This collection is designed for public read access to avoid security rule violations
-                // that would occur when querying the main 'profiles' collection.
-                const snapshot = await db.collection('publicStars').orderBy('createdAt', 'desc').limit(500).get();
-                const starsData = snapshot.docs.map(doc => doc.data().starCoords as StarCoords);
-                setAllStars(starsData.filter(coords => coords && typeof coords.x === 'number' && typeof coords.y === 'number'));
-            } catch (err) {
-                console.error("Error fetching stars from publicStars:", err);
-                setError("Could not load the Shared StarMap. This might be due to a network issue or database permissions.");
-            } finally {
-                setIsLoading(false);
-            }
-        };
-        fetchStars();
-    }, []);
-
-    const getMapPosition = (coord: number) => {
-        // The vector sum can range from approx -25 to 25.
-        // We normalize this to a 0-100 scale for positioning.
-        const normalized = (coord + 25) / 50 * 100;
-        return Math.max(0, Math.min(100, normalized)); // Clamp between 0% and 100%
-    };
-
-    return (
-        <div className="shared-starmap-wrapper">
-            <h3>The Shared StarMap</h3>
-            <p>See where your values align with others. Each star represents an anonymous user's profile.</p>
-            <div className="shared-starmap-container">
-                {isLoading && <div className="loading-spinner-small"></div>}
-                {error && <p className="error-message">{error}</p>}
-                {!isLoading && !error && (
-                    <>
-                        {allStars.map((star, i) => (
-                            <div
-                                key={i}
-                                className="collective-star"
-                                style={{
-                                    left: `${getMapPosition(star.x)}%`,
-                                    top: `${getMapPosition(-star.y)}%`, // Y is inverted for screen coordinates
-                                    animationDelay: `${Math.random() * 2}s`
-                                }}
-                            ></div>
-                        ))}
-                         <div
-                            className="collective-user-star"
-                            style={{
-                                left: `${getMapPosition(userStarCoords.x)}%`,
-                                top: `${getMapPosition(-userStarCoords.y)}%`
-                            }}
-                        ></div>
-                    </>
-                )}
-            </div>
-        </div>
-    );
-};
 
 
 type ResultsScreenProps = {
     optionalInfo: OptionalInfo;
-    profileData: { rankedScores: number[], starCoords: StarCoords } | null;
+    profileData: { rankedScores: number[], starCoords: StarCoords, profileCode?: string } | null;
     profileInfo: ProfileInfo | null;
     onForget: () => void;
+    notification: string | null;
+    setNotification: (msg: string | null) => void;
 };
 
-const ResultsScreen = ({ optionalInfo, profileData, profileInfo, onForget }: ResultsScreenProps) => {
+const ResultsScreen = ({ optionalInfo, profileData, profileInfo, onForget, notification, setNotification }: ResultsScreenProps) => {
     const chartRef = useRef<HTMLCanvasElement>(null);
     const chartInstance = useRef<ChartJsInstance | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
     const [isStarMapVisible, setIsStarMapVisible] = useState(false);
+    const [allStars, setAllStars] = useState<(StarCoords & { teamCode?: string | null, userId?: string | null, createdAt?: any, animationDelay: string, animationDuration: string })[]>([]);
+    const [isMapLoading, setIsMapLoading] = useState(false);
+    const [mapError, setMapError] = useState<string | null>(null);
+
+    useEffect(() => {
+        // Only fetch the map data if the user wants to see it.
+        if (isStarMapVisible && allStars.length === 0 && !isMapLoading) {
+            const fetchStars = async () => {
+                setIsMapLoading(true);
+                setMapError(null);
+                try {
+                    const snapshot = await db.collection('publicStars').orderBy('createdAt', 'desc').limit(500).get();
+                    const starsData = snapshot.docs.map(doc => {
+                        const data = doc.data();
+                        return {
+                            starCoords: data.starCoords as StarCoords,
+                            teamCode: data.teamCode || null,
+                            userId: data.userId || null,
+                            createdAt: data.createdAt
+                        };
+                    });
+                    const starsWithAnimation = starsData
+                        .filter(star => star.starCoords && typeof star.starCoords.x === 'number' && typeof star.starCoords.y === 'number')
+                        .map(star => ({
+                            x: star.starCoords.x,
+                            y: star.starCoords.y,
+                            teamCode: star.teamCode,
+                            userId: star.userId,
+                            createdAt: star.createdAt,
+                            animationDelay: `${Math.random() * 3}s`,
+                            animationDuration: `${2 + Math.random() * 3}s`
+                        }));
+                    setAllStars(starsWithAnimation);
+                } catch (err) {
+                    console.error("Error fetching stars from publicStars:", err);
+                    setMapError("Could not load the StarMap data.");
+                } finally {
+                    setIsMapLoading(false);
+                }
+            };
+            fetchStars();
+        }
+    }, [isStarMapVisible]); // This effect runs whenever isStarMapVisible changes.
 
     useEffect(() => {
         const resizeObserver = new ResizeObserver(entries => {
@@ -605,9 +660,9 @@ const ResultsScreen = ({ optionalInfo, profileData, profileInfo, onForget }: Res
                                 beginAtZero: true,
                                 max: 10,
                                 grid: { color: 'rgba(255, 255, 255, 0.2)' },
-                                pointLabels: { 
+                                pointLabels: {
                                     color: 'white',
-                                    font: { size: 12 } 
+                                    font: { size: 12 }
                                 },
                                 angleLines: { color: 'rgba(255, 255, 255, 0.2)' },
                                 ticks: {
@@ -626,19 +681,26 @@ const ResultsScreen = ({ optionalInfo, profileData, profileInfo, onForget }: Res
             }
         }
     }, [profileData, containerSize]);
+    // --- START: New Notification Hook ---
+    useEffect(() => {
+        if (notification) {
+            alert(notification);
+            // Clear the notification after showing it so it doesn't reappear
+            setNotification(null);
+        }
+    }, [notification, setNotification]); // <-- This now runs WHENEVER the 'notification' prop changes.
+    // --- END: New Notification Hook ---
 
-    const getStarPosition = (x: number, y: number, size: number) => {
-        const radius = size / 2 * 0.8; // Estimated radius of the chart's drawing area
-        // The starCoords are a vector sum, with an empirical max absolute value around 25.
-        // We scale these coordinates to fit within the visual radius of the chart.
-        const maxCoordinateValue = 25;
+    const getStarPosition = (x: number, y: number, containerSize: number) => {
+        const radius = containerSize / 2 * 0.8; // Scale within 80% of the chart area
+        const maxCoordinateValue = 25; // Empirical max value for the coordinate system
         const scaleFactor = radius / maxCoordinateValue;
 
-        const left = (size / 2) + x * scaleFactor - 15; // 15 is half star width
-        const top = (size / 2) - y * scaleFactor - 15; // 15 is half star height, -y for screen coords
+        const left = (containerSize / 2) + x * scaleFactor;
+        const top = (containerSize / 2) - y * scaleFactor; // -y for screen coordinates
         return { top: `${top}px`, left: `${left}px` };
     };
-    
+
     const backgroundStars = useMemo(() => Array.from({ length: 15 }).map(() => ({
         left: `${Math.random() * 100}%`,
         top: `${Math.random() * 100}%`,
@@ -646,14 +708,12 @@ const ResultsScreen = ({ optionalInfo, profileData, profileInfo, onForget }: Res
         animationDuration: `${2 + Math.random() * 3}s`
     })), []);
 
-    const profileCode = useMemo(() => {
-        if (!profileData) return '';
-        return generateProfileCode(profileData.rankedScores);
-    }, [profileData]);
+    // Directly use the profileCode from profileData. No fallback calculation.
+    const profileCode = profileData?.profileCode;
 
     const { canForget, cooldownMessage } = useMemo(() => {
         if (!profileInfo || !profileInfo.createdAt) {
-             // This can happen for anonymous profiles if REQUIRE_AUTH_TO_VIEW_RESULTS is false
+            // This can happen for anonymous profiles if REQUIRE_AUTH_TO_VIEW_RESULTS is false
             return { canForget: false, cooldownMessage: '' };
         }
         // createdAt could be a Firebase Timestamp object or an ISO string
@@ -677,30 +737,115 @@ const ResultsScreen = ({ optionalInfo, profileData, profileInfo, onForget }: Res
     return (
         <div className="screen results-screen">
             <h2>{userName}'s Values Profile</h2>
+            <p className="profile-code">{profileCode}</p>
+
             <div className="chart-container" ref={containerRef}>
                 {backgroundStars.map((style, i) => (
                     <div key={i} className="background-star" style={style}></div>
                 ))}
                 <canvas ref={chartRef} width={containerSize.width} height={containerSize.height}></canvas>
-                <div className="user-star" style={userStarPosition}>
-                     <div className="star-highlight"></div>
-                     &#9733;
+
+                {/* --- START: Added StarMap Overlay Logic --- */}
+                {isStarMapVisible && (
+                    <>
+                        {isMapLoading && <div className="loading-spinner-small"></div>}
+                        {mapError && <p className="error-message">{mapError}</p>}
+                        {(() => {
+                            const userTeamCode = optionalInfo.teamCode?.trim().toUpperCase();
+
+                            // Deduplicate team members: keep only most recent star per userId
+                            const deduplicatedStars = userTeamCode ? allStars.reduce((acc, star) => {
+                                const isTeamMember = star.teamCode?.trim().toUpperCase() === userTeamCode;
+
+                                if (!isTeamMember) {
+                                    // Not a team member, keep as-is
+                                    return [...acc, { ...star, isTeamMember: false }];
+                                }
+
+                                if (!star.userId) {
+                                    // Team member but no userId (legacy data), keep it
+                                    return [...acc, { ...star, isTeamMember: true }];
+                                }
+
+                                // Team member with userId - check for duplicates
+                                const existingIndex = acc.findIndex(s => s.userId === star.userId && s.isTeamMember);
+                                if (existingIndex === -1) {
+                                    // First occurrence of this userId
+                                    return [...acc, { ...star, isTeamMember: true }];
+                                }
+
+                                // Duplicate found - keep the most recent one
+                                const existing = acc[existingIndex];
+                                const starTime = star.createdAt?.toDate ? star.createdAt.toDate().getTime() : 0;
+                                const existingTime = existing.createdAt?.toDate ? existing.createdAt.toDate().getTime() : 0;
+
+                                if (starTime > existingTime) {
+                                    // Current star is newer, replace existing
+                                    return [...acc.slice(0, existingIndex), { ...star, isTeamMember: true }, ...acc.slice(existingIndex + 1)];
+                                }
+
+                                // Existing star is newer, keep it
+                                return acc;
+                            }, [] as (typeof allStars[0] & { isTeamMember: boolean })[]) : allStars.map(star => ({ ...star, isTeamMember: false }));
+
+                            return deduplicatedStars.map((star, i) => {
+                                if (star.isTeamMember) {
+                                    // Team member: render as full-size gold star (no pulsing)
+                                    return (
+                                        <div key={i} className="team-star-container" style={getStarPosition(star.x, star.y, containerSize.width)}>
+                                            <StarIcon className="team-star" />
+                                        </div>
+                                    );
+                                } else {
+                                    // Non-team member: render as white dot
+                                    return (
+                                        <div
+                                            key={i}
+                                            className="collective-star"
+                                            style={{
+                                                ...getStarPosition(star.x, star.y, containerSize.width),
+                                                animationDelay: star.animationDelay,
+                                                animationDuration: star.animationDuration,
+                                            }}
+                                        ></div>
+                                    );
+                                }
+                            });
+                        })()}
+                    </>
+                )}
+                {/* --- END: Added StarMap Overlay Logic --- */}
+
+                <div className="user-star-container" style={userStarPosition}>
+                    <div className="star-highlight" />
+                    <StarIcon className="user-star" />
                 </div>
             </div>
-            <p className="profile-code">{profileCode}</p>
 
             <button onClick={() => setIsStarMapVisible(!isStarMapVisible)} className="starmap-toggle-button">
-              {isStarMapVisible ? 'Hide StarMap' : 'View StarMap'}
+                {isStarMapVisible ? 'Hide StarMap' : 'View StarMap'}
             </button>
-            
-            {isStarMapVisible && <SharedStarMap userStarCoords={profileData.starCoords} />}
 
-            {profileInfo && (
-                <div className="profile-actions">
-                    <button onClick={onForget} className="cta-button forget-button" disabled={!canForget}>Forget me!</button>
-                    {!canForget && <p className="cooldown-message">{cooldownMessage}</p>}
-                </div>
-            )}
+            <div style={{ marginTop: '1.5rem', width: '100%', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center' }}>
+                <a
+                    href="https://map.truvtus.com"
+                    className="cta-button"
+                    style={{ textDecoration: 'none', width: 'fit-content', padding: '0.8rem 2rem' }}
+                >
+                    Go to TRUVTUS Map
+                </a>
+
+                {profileInfo && (
+                    <div className="profile-actions" style={{ width: '100%', marginTop: '1rem' }}>
+                        <button onClick={onForget} className="cta-button forget-button" disabled={!canForget}>Forget me!</button>
+                        {!canForget && (
+                            <p className="cooldown-message" style={{ marginTop: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                                You can update your profile after {cooldownMessage.split('after ')[1]}
+                            </p>
+                        )}
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
@@ -709,8 +854,8 @@ const App = () => {
     const [screen, setScreen] = useState<Screen>('welcome');
     const [answers, setAnswers] = useState<number[]>(Array(QUESTIONS.length).fill(50));
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-    const [profileData, setProfileData] = useState<{ rankedScores: number[], starCoords: StarCoords } | null>(null);
-    const [optionalInfo, setOptionalInfo] = useState<OptionalInfo>({ name: '', birthYear: '', education: '', source: '' });
+    const [profileData, setProfileData] = useState<{ rankedScores: number[], starCoords: StarCoords, profileCode?: string } | null>(null);
+    const [optionalInfo, setOptionalInfo] = useState<OptionalInfo>({ name: '', birthYear: '', education: '', source: '', teamCode: '' });
     const [isSaving, setIsSaving] = useState(false);
 
     const [user, setUser] = useState<User | null>(null);
@@ -718,7 +863,7 @@ const App = () => {
     const [authError, setAuthError] = useState('');
     const [dataError, setDataError] = useState('');
     const [profileInfo, setProfileInfo] = useState<ProfileInfo | null>(null);
-    
+    const [notification, setNotification] = useState<string | null>(null);
     const pendingProfileRef = useRef<{ answers: number[], optionalInfo: OptionalInfo } | null>(null);
     const isInitialLoad = useRef(true);
 
@@ -730,23 +875,77 @@ const App = () => {
         setCurrentQuestionIndex(0);
         setProfileData(null);
         setProfileInfo(null);
-        setOptionalInfo({ name: '', birthYear: '', education: '', source: '' });
+        setOptionalInfo({ name: '', birthYear: '', education: '', source: '', teamCode: '' });
         setDataError('');
     };
 
     const processPendingProfile = async (userForProfile: User) => {
-        if (pendingProfileRef.current) {
-            const profileToSave = pendingProfileRef.current;
-            
-            // Clear the pending profile immediately to prevent race conditions or double saves.
-            pendingProfileRef.current = null;
-            sessionStorage.removeItem('pendingProfile'); 
+        if (!pendingProfileRef.current) return;
 
-            await saveProfile(profileToSave.answers, profileToSave.optionalInfo, userForProfile);
+        const profileToSave = pendingProfileRef.current;
+        // Clear the pending profile immediately to prevent race conditions or double saves.
+        pendingProfileRef.current = null;
+        sessionStorage.removeItem('pendingProfile');
+
+        // --- START: New Cooldown Logic ---
+
+        // Step 1: Check if the user has an existing active profile.
+        const activeProfile = await getActiveProfileInfo(userForProfile.uid);
+
+        if (activeProfile && activeProfile.createdAt) {
+            // Step 2: If they do, check if it's on cooldown.
+            const createdAtDate = activeProfile.createdAt.toDate ? activeProfile.createdAt.toDate() : new Date(activeProfile.createdAt);
+            const cooldownEndDate = new Date(createdAtDate.getTime());
+            cooldownEndDate.setHours(cooldownEndDate.getHours() + PROFILE_CREATION_COOLDOWN_HOURS);
+
+            const isStillOnCooldown = new Date() < cooldownEndDate;
+
+            if (isStillOnCooldown) {
+                // Step 3A: User is on cooldown. Save the new attempt as ALREADY ARCHIVED.
+                console.log("User is on cooldown. Saving new profile as archived.");
+                await saveProfile(profileToSave.answers, profileToSave.optionalInfo, userForProfile, { forceArchive: true });
+
+                setNotification('Your new attempt has been saved to your history. Your current profile will remain active until the cooldown period ends.');
+
+                // --- FIX for Prob #2 ---
+                // Since the saveProfile function skipped the UI update, we must now manually load
+                // the user's OLD, still-active profile and show the results screen.
+                console.log("Loading existing active profile to display.");
+                const profileDoc = await db.collection('profiles').doc(activeProfile.id).get();
+                if (profileDoc.exists) {
+                    const activeProfileData = profileDoc.data();
+                    const finalProfile = calculateProfile(activeProfileData.answers);
+                    // Use the stored profile code directly from DB
+                    const code = activeProfileData.profileCode;
+                    setProfileData({ ...finalProfile, profileCode: code });
+                    setOptionalInfo(activeProfileData.optionalInfo || { name: '', birthYear: '', education: '', source: '', teamCode: '' });
+                    setProfileInfo({ id: activeProfile.id, createdAt: activeProfile.createdAt });
+                    setScreen('results');
+                } else {
+                    // This is an unlikely edge case, but good to handle.
+                    // If the active profile was deleted, just reset the questionnaire.
+                    setDataError("Your active profile could not be loaded. Please start over.");
+                    setScreen('error');
+                }
+                // --- END FIX ---
+
+                return; // Stop execution here.
+            }
         }
+
+        // Step 3B: User is NOT on cooldown (or has no active profile). Proceed with a normal save.
+        console.log("User is not on cooldown. Saving new profile normally.");
+        await saveProfile(profileToSave.answers, profileToSave.optionalInfo, userForProfile);
+
+        // --- END: New Cooldown Logic ---
     };
 
     const handleSuccessfulVerifiedLogin = (loggedInUser: User) => {
+        // --- FIX for Prob #1 ---
+        // Set the user state immediately to prevent a race condition and ensure the header updates.
+        setUser(loggedInUser);
+        // --- END FIX ---
+
         processPendingProfile(loggedInUser);
     };
 
@@ -788,12 +987,14 @@ const App = () => {
                             // Find the most recent, non-archived profile.
                             // `isArchived !== true` correctly handles both `false` and `undefined`.
                             const activeProfile = userProfiles.find(p => p.isArchived !== true);
-                            
+
                             if (activeProfile) {
                                 const finalProfile = calculateProfile(activeProfile.answers);
-                                setProfileData(finalProfile);
+                                // Use the stored profile code directly from DB
+                                const code = activeProfile.profileCode;
+                                setProfileData({ ...finalProfile, profileCode: code });
                                 // Defensively set optionalInfo to prevent crashes if it's missing
-                                setOptionalInfo(activeProfile.optionalInfo || { name: '', birthYear: '', education: '', source: '' });
+                                setOptionalInfo(activeProfile.optionalInfo || { name: '', birthYear: '', education: '', source: '', teamCode: '' });
                                 setProfileInfo({ id: activeProfile.id, createdAt: activeProfile.createdAt });
                                 setScreen('results');
                             } else {
@@ -801,7 +1002,7 @@ const App = () => {
                                 resetQuestionnaire();
                             }
                         } else {
-                             // User is logged in but has no profiles at all.
+                            // User is logged in but has no profiles at all.
                             resetQuestionnaire();
                         }
                     }
@@ -861,7 +1062,7 @@ const App = () => {
                     a.click();
                     document.body.removeChild(a);
                     URL.revokeObjectURL(url);
-                    
+
                 } catch (error) {
                     console.error("Error exporting data:", error);
                     alert('An error occurred during export. Check the console for details.');
@@ -924,26 +1125,28 @@ const App = () => {
         }
     };
 
-    const saveProfile = async (answersToSave: number[], infoToSave: OptionalInfo, userToSave: User | null) => {
+    const saveProfile = async (answersToSave: number[], infoToSave: OptionalInfo, userToSave: User | null, options: { forceArchive?: boolean } = {}) => {
         setIsSaving(true);
 
         // Basic input sanitization
         const sanitizedInfo = {
             ...infoToSave,
             name: infoToSave.name.trim(),
+            teamCode: infoToSave.teamCode ? infoToSave.teamCode.trim().toUpperCase() : '',
         };
 
         const finalProfile = calculateProfile(answersToSave);
         const profileCode = generateProfileCode(finalProfile.rankedScores);
-
+        const profileDistor = calculateProfileDistortion(finalProfile.rankedScores);
         const payload: any = {
             profileCode,
+            profileDistor,
             rankedScores: finalProfile.rankedScores,
             starCoords: finalProfile.starCoords,
             answers: answersToSave,
             optionalInfo: sanitizedInfo,
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            isArchived: false,
+            isArchived: options.forceArchive || false,
         };
         if (userToSave) {
             payload.userId = userToSave.uid;
@@ -964,14 +1167,16 @@ const App = () => {
             return; // Halt execution if the primary save fails.
         }
 
-        // --- Step 2: Since save was successful, update the UI immediately. ---
-        setProfileData(finalProfile);
-        setOptionalInfo(sanitizedInfo);
-        if (userToSave) {
-            setProfileInfo({ id: docRef.id, createdAt: new Date() }); // Use client date for immediate UI feedback.
+        // --- Step 2: If the profile was NOT force-archived, update the UI. ---
+        if (!options.forceArchive) {
+            setProfileData({ ...finalProfile, profileCode }); // Ensure code is set locally
+            setOptionalInfo(sanitizedInfo);
+            if (userToSave) {
+                setProfileInfo({ id: docRef.id, createdAt: new Date() }); // Use client date for immediate UI feedback.
+            }
+            setScreen('results');
         }
-        setScreen('results');
-        setIsSaving(false);
+        setIsSaving(false); // Make sure this is always called
 
         // --- Step 3: Trigger background task to save public, anonymous star data. ---
         // This is a client-side "double write". In a production system, this would
@@ -979,6 +1184,8 @@ const App = () => {
         try {
             await db.collection('publicStars').add({
                 starCoords: finalProfile.starCoords,
+                teamCode: sanitizedInfo.teamCode || null,
+                userId: userToSave?.uid || null,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
             console.log('Public star data saved successfully.');
@@ -986,13 +1193,13 @@ const App = () => {
             console.warn('Could not save public star data. The main profile was saved.', error);
         }
 
-        // --- Step 4: Trigger background task to clean up old profiles. ---
+        // --- Step 4: If this is a NEW ACTIVE profile, trigger background task to clean up old profiles. ---
         // This is "fire and forget". It won't block the UI or show errors to the user.
-        if (userToSave) {
+        if (userToSave && !options.forceArchive) {
             archiveOldProfiles(userToSave.uid, docRef.id);
         }
     };
-    
+
     const handleSubmitOptionalInfo = async () => {
         if (REQUIRE_AUTH_TO_VIEW_RESULTS && (!user || !user.emailVerified)) {
             const profileToSave = { answers, optionalInfo };
@@ -1012,6 +1219,39 @@ const App = () => {
         auth.signOut();
     };
 
+    // --- START: New Helper Function ---
+    const getActiveProfileInfo = async (userId: string): Promise<ProfileInfo | null> => {
+        try {
+            const profilesRef = db.collection('profiles');
+            // Query for all profiles for this user that are NOT archived.
+            // isArchived !== true handles both `false` and cases where the field is missing.
+            const snapshot = await profilesRef
+                .where('userId', '==', userId)
+                .where('isArchived', '==', false) // <-- THE FIX: Use an equality check instead
+                .orderBy('createdAt', 'desc')
+                .limit(1)
+                .get();
+
+            if (snapshot.empty) {
+                return null; // The user has no active profiles.
+            }
+
+            const doc = snapshot.docs[0];
+            const data = doc.data();
+
+            // Return just the essential info: the profile's ID and when it was created.
+            return {
+                id: doc.id,
+                createdAt: data.createdAt
+            };
+        } catch (error) {
+            console.error("Error fetching active profile info:", error);
+            // In case of an error, we assume no active profile was found.
+            return null;
+        }
+    };
+
+    // --- END: New Helper Function ---
     const handleForgetProfile = async () => {
         if (profileInfo && profileInfo.id) {
             try {
@@ -1037,7 +1277,7 @@ const App = () => {
             case 'questionnaire': return <QuestionnaireScreen currentQuestionIndex={currentQuestionIndex} questionOrder={questionOrder} answers={answers} onAnswerChange={handleAnswerChange} onNextQuestion={handleNextQuestion} />;
             case 'optionalInfo': return <OptionalInfoScreen optionalInfo={optionalInfo} isSaving={isSaving} onInfoChange={handleOptionalInfoChange} onSubmit={handleSubmitOptionalInfo} showAuthWarning={showAuthWarning} />;
             case 'auth': return <AuthScreen setAuthError={setAuthError} authError={authError} onBack={() => setScreen('optionalInfo')} onSuccessfulVerifiedLogin={handleSuccessfulVerifiedLogin} />;
-            case 'results': return <ResultsScreen optionalInfo={optionalInfo} profileData={profileData} profileInfo={profileInfo} onForget={handleForgetProfile} />;
+            case 'results': return <ResultsScreen optionalInfo={optionalInfo} profileData={profileData} profileInfo={profileInfo} onForget={handleForgetProfile} notification={notification} setNotification={setNotification} />;
             case 'error': return <ErrorScreen message={dataError} onLogout={handleLogout} />;
             default: return <WelcomeScreen onStart={handleStart} />;
         }

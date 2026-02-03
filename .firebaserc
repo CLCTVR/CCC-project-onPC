@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "q7-web-app1"
+  },
+  "targets": {
+    "q7-web-app1": {
+      "hosting": {
+        "app": [
+          "q7-web-app1"
+        ]
+      }
+    }
+  },
+  "etags": {} 
+}

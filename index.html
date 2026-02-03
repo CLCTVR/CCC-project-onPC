@@ -3,16 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Collectiver Culture Compass</title>
+    <title>Q7-Lite by Collectiver</title>
     <link rel="stylesheet" href="/styles.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-    <!-- IMPORTANT: Loads your secret Firebase configuration -->
-    <script src="/firebase-config.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
     <script type="importmap">
 {
   "imports": {
@@ -24,11 +22,27 @@
 }
 </script>
   <link rel="stylesheet" href="/index.css">
+
+<link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link rel="shortcut icon" href="/favicon.ico" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+<link rel="manifest" href="/site.webmanifest?v=3">
+
+<!-- Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-YOUR-ID-HERE"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-K1KP06N1HB');
+</script>
+
 </head>
   <body>
     <div id="root"></div>
     <!-- The script type is set to "text/babel" to enable in-browser TSX compilation -->
-    <script type="text/babel" data-presets="react,typescript" data-type="module" src="/index.tsx"></script>
-  <script type="module" src="/index.tsx"></script>
+    <script type="module" src="/index.tsx"></script>
 </body>
-</html>
+</html> 

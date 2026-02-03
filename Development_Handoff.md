@@ -1,174 +1,187 @@
-# Development Handoff: Collectiver Culture Compass
+﻿# Development Handoff: Q7-Lite (formerly Collectiver Culture Compass)
 
-**Version:** 1.2
-**Handoff Date:** 2024-11-06
+**Version:** 1.6
+**Handoff Date:** 2026-01-22 21:40
 **Point of Contact:** Product Manager
 
 ---
 
 ### Version History
+*   **v1.6 (2026-01-22):**
+    *   **New Feature:** Added **Team View** functionality to the StarMap visualization.
+    *   **User Experience:** Users with a `teamCode` can now see their team members' stars displayed as full-size static gold stars (30px, using StarIcon component) overlaid on the general population (white dots, 6px) when clicking "View StarMap".
+    *   **Data Architecture:** Extended `publicStars` collection to include `teamCode` and `userId` fields for team filtering and deduplication.
+    *   **Deduplication Logic:** Implemented client-side deduplication to show only the most recent star per user when multiple profiles exist with the same `teamCode`.
+    *   **Visual Hierarchy:** User's star (pulsing gold StarIcon, z-index: 10) > Team members' stars (static gold StarIcon, z-index: 5) > General population (white dots, z-index: 1).
+    *   **UI Text Updates:** Changed Optional Information form label from "Ref.Code (if available)" to "Ref.Code (if provided)" and placeholder from "Enter code" to "e.g. ProjectAlpha2024".
+*   **v1.5 (2025-12-28):**
+    *   **New Feature:** Added **Profile Distortion Index** calculation and storage.
+    *   **Data Quality:** The profileDistor field measures profile consistency (average absolute difference between consecutive Q7 dimension values). Lower values (2-4) indicate thoughtful, consistent responses. Higher values (5-7) may indicate rushed or unreliable answers.
+    *   **Admin Integration:** The distortion index is now saved to Firestore and displayed in the Q7-Admin Dashboard with color-coded indicators (green \u003c 4.5, yellow 4.5-5.3, red \u003e 5.3).
+    *   **Function Added:** calculateProfileDistortion(rankedScores) added to core logic in index.tsx.
+*   **v1.4 (2025-12-03):**
+    *   **New Feature:** Added \"Ref.Code\" (Team/Referral Code) optional field to the end of the OptionalInfoScreen.
+    *   **Data Hygiene:** Input for \"Ref.Code\" is automatically **trimmed** and converted to **UPPERCASE** before saving to Firestore. This ensures consistent grouping in the Admin Dashboard (Q7Dash).
+*   **v1.3 (2025-12-02):**
+    *   **App Renaming:** Application officially renamed to \"Q7-Lite\".
+    *   **Data Architecture Update:** The profileCode (pcode) is now calculated immediately upon profile save and **stored persistently in Firestore**. This allows the \"sister\" Admin App (Q7Dash) to query and filter users by profile type without needing to download and recalculate raw scores.
+    *   **UI Update:** The Results screen now pulls the profileCode directly from the database record rather than calculating it on the fly, ensuring consistency between the User view and Admin view.
+    *   **Infrastructure:** Confirmed usage of Firebase Hosting targets to separate the Q7-Lite user app from the Q7Dash admin tool.
 *   **v1.2 (2024-11-06):**
-    *   **SECURITY UPDATE:** Removed hardcoded Firebase API key from source code. The key is now expected to be loaded from a `process.env.API_KEY` environment variable to prevent credentials exposure.
-    *   **SECURITY UPDATE:** Added basic input sanitization for user-provided name to prevent malformed data entry.
-    *   Updated documentation to reflect new security-related setup steps and added a critical warning about Firestore rules.
+    *   **SECURITY UPDATE:** Removed hardcoded Firebase API key.
+    *   **SECURITY UPDATE:** Added basic input sanitization.
 *   **v1.1 (2024-11-05):**
-    *   Implemented a robust login flow for newly verified users to prevent race conditions and ensure pending profiles are saved correctly.
-    *   Added `sessionStorage` persistence for pending profiles to prevent data loss on page reload during the verification process.
-    *   Corrected a critical configuration error in `index.html`'s `importmap` that was loading conflicting versions of React, ensuring application stability.
-    *   Updated documentation to reflect these changes.
+    *   Implemented robust login flow and sessionStorage persistence.
 *   **v1.0 (2024-10-27):** Initial project handoff.
 
 ---
 
 ### 1. Project Overview
 
-The Collectiver Culture Compass is a web application designed to generate a unique "values profile" for a user based on their answers to 7 psychometric questions. The user's profile is visualized in two ways:
+**Q7-Lite** is a web application designed to generate a unique \"values profile\" for a user based on their answers to 7 psychometric questions. The user's profile is visualized in two ways:
 1.  A **radar chart** showing the strength of 9 distinct values.
-2.  A **unique star** whose coordinates are calculated from the profile, intended for a future "collective map" visualization.
+2.  A **unique star** whose coordinates are calculated from the profile, placed on a collective map.
 
-The application includes user authentication, allowing users to save their profiles. It also features a unique "Forget me!" function that archives their old profile, allowing them to start anew after a configurable cooldown period, while preserving all historical data for research purposes.
+The application includes user authentication, allowing users to save their profiles. It also features a unique \"Forget me!\" function that archives their old profile, allowing them to start anew after a configurable cooldown period.
 
 ### 2. Key Features
 
-*   **Questionnaire Flow:** A 7-step questionnaire using slider inputs for nuanced answers. Question order is randomized for each session.
-*   **Profile Calculation:** A proprietary algorithm (see `calculation_specification.md`) converts the 7 answers into 9 ranked value scores, a unique 9-digit profile code, and a set of {x, y} coordinates.
-*   **Profile Visualization:** Uses Chart.js to render the radar chart and dynamically positioned CSS elements for the user's star.
-*   **User Authentication:** Full email/password registration and login functionality powered by Firebase Authentication. Features a robust verification flow that reliably handles profile creation for newly verified users.
-*   **Profile Persistence:** User profiles are saved to a Firestore database. The app automatically fetches a logged-in user's active profile upon load. Pending profiles for new users are temporarily stored in `sessionStorage` to prevent data loss during the email verification process.
-*   **"Forget me!" Functionality:** Allows users to archive their current profile and take the questionnaire again. This is gated by a time-lock to prevent abuse. Archived data is preserved in the database for backend analysis.
-*   **Admin Configuration:** Key operational parameters (e.g., login requirements, cooldown periods) are managed via constants at the top of the main script for easy access.
+*   **Questionnaire Flow:** A 7-step questionnaire using slider inputs. Question order is randomized.
+*   **Profile Calculation \u0026 Storage:**
+    *   Algorithms convert 7 answers into 9 ranked scores and X/Y coordinates.
+    *   **v1.3:** A 9-digit profileCode is generated and saved to the profiles collection in Firestore.
+    *   **v1.4:** Users can enter an optional \"Ref.Code\" to link their profile to a specific team or cohort.
+    *   **v1.5:** A profileDistor (Profile Distortion Index) is calculated to measure response consistency and saved to Firestore for quality analysis.
+*   **Profile Visualization:** Uses Chart.js for radar charts and CSS for star positioning.
+*   **User Authentication:** Firebase Auth (Email/Password) with a robust verification flow.
+*   **\"Forget me!\" Functionality:** Archives current profile with a time-lock (default 30 days) before a new one can be created.
 
 ### 3. Technology Stack
 
-*   **Frontend Framework:** React v18 (with Hooks)
-*   **Language:** TypeScript (transpiled in-browser via Babel Standalone)
-*   **Charting Library:** Chart.js
-*   **Backend-as-a-Service (BaaS):** Google Firebase
-    *   **Authentication:** Firebase Auth (Email/Password provider)
-    *   **Database:** Firestore
-*   **Environment:**
-    *   No build step. The application runs directly in the browser.
-    *   Modules are loaded via `importmap` from `esm.sh` and a CDN.
+*   **Frontend:** React v18 (via Vite)
+*   **Language:** TypeScript
+*   **Charting:** Chart.js
+*   **BaaS:** Google Firebase (Auth, Firestore, Hosting)
+*   **Hosting:** Firebase Hosting with **Multi-Site/Target Configuration** (separating Q7-Lite from Q7Dash).
 
 ### 4. Project Structure
 
-The project is a single-page application contained in a flat file structure.
-
-*   `index.html`: The main HTML document. It loads all necessary libraries (Firebase, Chart.js, React, Babel) via a script `importmap` and loads the main application script.
-*   `index.tsx`: **The core of the application.** This single file contains all React components, state management logic, Firebase interactions, and the profile calculation functions.
-*   `styles.css`: All CSS for the application, including layout, animations, and responsive design.
-*   `calculation_specification.md`: The canonical document detailing the formulas for calculating profile scores and coordinates.
-*   `metadata.json`: Configuration file for the hosting environment.
-*   `Development_Handoff.md`: This document.
+*   index.html: Main entry point.
+*   index.tsx: **Core Logic.** Contains all React components, state, Firebase logic, and math algorithms.
+*   index.css: Tailwind CSS imports and custom styling.
+*   irebase.json: Configuration for hosting targets.
+*   ite.config.ts: Build configuration.
 
 ### 5. Core Logic Breakdown
 
 #### Profile Calculation
-The calculation logic is contained within two key functions in `index.tsx`, based on `calculation_specification.md`:
+The logic acts as the \"source of truth\" for the user's profile type:
+1.  calculateProfile(answers): Returns 
+ankedScores (1-10 scale) and starCoords ({x, y}).
+2.  generateProfileCode(rankedScores): Generates the string (e.g., \"912837465\"). **Crucially, this is now executed before saving to Firestore, not just during display.**
+3.  **v1.5:** calculateProfileDistortion(rankedScores): Calculates the Profile Distortion Index by measuring the average absolute difference between consecutive dimension values in the circular Q7 model. This provides a data quality metric.
 
-1.  `calculateProfile(answers)`: Takes the array of 7 answers (1-100) and returns an object containing `rankedScores` (an array of 9 values scaled 1-10 for the chart) and `starCoords` ({x, y} position).
-2.  `generateProfileCode(rankedScores)`: Takes the `rankedScores` array, determines the rank of each of the 9 values (from 1st to 9th), and assembles a 9-digit string representing the profile's unique shape.
+#### Profile Distortion Index
+**Purpose:** Identifies potentially unreliable or rushed responses by measuring profile smoothness.
 
-#### State Management (App Component)
-The primary state is managed within the `App` component using React Hooks (`useState`, `useEffect`, `useMemo`, `useRef`).
+**Formula:** Average of absolute differences between consecutive Q7 dimensions (forming a circle):
+- |UN-SD|, |BE-UN|, |TC-BE|, |SE-TC|, |PO-SE|, |AC-PO|, |HE-AC|, |ST-HE|, |SD-ST|
 
-*   `screen`: Controls which view is currently visible to the user (e.g., 'welcome', 'questionnaire', 'results', 'auth').
-*   `user`: Holds the current Firebase user object or `null`.
-*   `profileData`: Stores the calculated profile object (`rankedScores`, `starCoords`).
-*   `profileInfo`: Holds metadata about the saved profile, like its Firestore `id` and `createdAt` timestamp, which is crucial for the "Forget me!" cooldown logic.
-*   The `App` component also manages the creation of pending profiles for new users. This state is passed from the `AuthScreen` via a direct callback (`onSuccessfulVerifiedLogin`) to ensure it is saved after a successful, verified login.
+**Interpretation:**
+- **Low (2-4):** Smooth, consistent profile indicating thoughtful responses
+- **Medium (4-5.3):** Normal variation
+- **High (5.3+):** Erratic pattern suggesting rushed or careless answers
+
+**Theoretical Range:** 0-9 (typical range: 2-6)
+
+**Implementation:**
+`	ypescript
+const calculateProfileDistortion = (rankedScores: number[]): number =\u003e {
+    const differences: number[] = [];
+    for (let i = 0; i \u003c rankedScores.length; i++) {
+        const current = rankedScores[i];
+        const next = rankedScores[(i + 1) % rankedScores.length];
+        differences.push(Math.abs(current - next));
+    }
+    const sum = differences.reduce((acc, val) =\u003e acc + val, 0);
+    const average = sum / differences.length;
+    return Number(average.toFixed(2));
+};
+`
 
 ### 6. Firebase Integration
 
-*   **Initialization:** Firebase is initialized at the top of `index.tsx`. The configuration object must be populated with your project's details, and the API key must be provided via an environment variable.
-*   **Auth Listener & Login Flow:**
-    *   The `auth.onAuthStateChanged` listener is a key piece of logic that reacts to login/logout events. It is responsible for fetching an existing user's active profile from Firestore or clearing session data on logout.
-    *   To handle the specific edge case of a new user registering, verifying their email in a separate tab, and then logging in immediately, a direct callback (`onSuccessfulVerifiedLogin`) is used. This callback is triggered from the `AuthScreen` and directly instructs the main `App` component to save the pending profile, bypassing potential race conditions with the `onAuthStateChanged` listener.
-    *   To prevent data loss if the user reloads the page during this process, pending profile data (answers and optional info) is persisted to `sessionStorage`.
-*   **Data Model:** All data is stored in a single Firestore collection named `profiles`.
+*   **Initialization:** Config is loaded via import.meta.env variables.
+*   **Data Model (profiles collection):**
+    *   Each document represents a user profile.
+    *   **New Field (v1.3):** profileCode (String) is now mandatory for new records.
+    *   **New Field (v1.5):** profileDistor (Number) stores the Profile Distortion Index.
+*   **Hosting Architecture:**
+    *   The project uses Firebase Hosting Targets.
+    *   Target pp: Deploys Q7-Lite (User App).
+    *   (Separate Target): Deploys Q7Dash (Admin Dashboard).
 
-### 7. Admin Configuration
+### 7. Firestore Data Schema
 
-To modify key operational parameters, edit the constants at the top of `index.tsx`:
-
-*   `REQUIRE_AUTH_TO_VIEW_RESULTS` (boolean): If `true`, users must create an account or log in to see their results screen. If `false`, anonymous users can see their results, but the profile will not be saved.
-*   `PROFILE_CREATION_COOLDOWN_HOURS` (number): Defines the number of hours a user must wait after "forgetting" their profile before they can create a new one.
-
-### 8. Firestore Data Schema
-
-**Collection:** `profiles`
-
-Each document in this collection represents a single user profile instance.
+**Collection:** profiles
 
 | Field          | Type                     | Description                                                               |
 | -------------- | ------------------------ | ------------------------------------------------------------------------- |
-| `userId`       | `string`                 | The Firebase Auth UID of the user. Absent for anonymous profiles.         |
-| `userEmail`    | `string` \| `null`         | The user's email address, for reference.                                  |
-| `answers`      | `Array<number>`          | The raw answers [1-100] from the 7 questions.                             |
-| `rankedScores` | `Array<number>`          | The calculated scores [1-10] for the 9 values.                            |
-| `starCoords`   | `Map {x, y}`             | The calculated coordinates for the user's star.                           |
-| `profileCode`  | `string`                 | The unique 9-digit code for the profile shape.                            |
-| `optionalInfo` | `Map`                    | User-submitted optional data (name, birthYear, etc.).                     |
-| `createdAt`    | `Timestamp`              | The server-side timestamp of when the profile was created.                |
-| `isArchived`   | `boolean`                | `true` if the user has "forgotten" this profile. Defaults to `false`.     |
-| `archivedAt`   | `Timestamp`              | Server-side timestamp of when the profile was archived.                   |
+| userId       | string                 | Firebase Auth UID.                                                        |
+| nswers      | Array\u003cnumber\u003e          | Raw answers [1-100].                                                      |
+| 
+ankedScores | Array\u003cnumber\u003e          | Calculated scores [1-10].                                                 |
+| starCoords   | Map {x, y}             | Calculated coordinates.                                                   |
+| profileCode  | string                 | **(Critical)** The unique 9-digit code. Stored for Admin Analytics.       |
+| profileDistor| 
+umber                 | **(v1.5)** Profile Distortion Index (2-6 typical). Lower = more reliable. |
+| optionalInfo | Map                    | Includes 
+ame, irthYear, education, source, and **	eamCode**.  |
+| createdAt    | Timestamp              | Creation date.                                                            |
+| isArchived   | oolean                | 	rue if \"forgotten\".                                                    |
 
-### 9. Local Setup & Running
+**Notes on optionalInfo.teamCode:**
+*   Added in v1.4.
+*   Data is normalized before storage: 	rim() and 	oUpperCase().
+*   Example: User types \" team alpha \" -\u003e Saved as \"TEAM ALPHA\".
 
-**IMPORTANT:** This project is designed to be run with a build process (like Vite or Webpack) that can handle environment variables. The in-browser transpilation is for demonstration only and cannot securely load the required API key.
+**Notes on profileDistor:**
+*   Added in v1.5.
+*   Automatically calculated during profile save.
+*   Used by Q7-Admin Dashboard for data quality filtering and visualization.
+*   Profiles with high distortion (5.3+) are flagged with red indicators in the admin interface.
 
-1.  **Firebase Project:** Create a new Firebase project.
-2.  **Add Web App:** Add a new Web App to your Firebase project to get your configuration details.
-3.  **Environment Variable:** In a project with a build process, you would create a `.env` file in your project root and add your Firebase Web API Key:
-    *   For Vite: `VITE_API_KEY=AIzaSy...`
-    *   For Create React App: `REACT_APP_API_KEY=AIzaSy...`
-4.  **Update Config:** Ensure the `firebaseConfig` in `index.tsx` is populated with your project's details (projectId, authDomain, etc.). The `apiKey` is loaded automatically from the environment variable.
-5.  **Enable Services:** In the Firebase Console, enable **Authentication** (with the Email/Password provider) and **Firestore**.
-6.  **Install & Run:** In a standard setup, you would run `npm install` and `npm start` (or `npm run dev`). This will start a local development server that makes the environment variables available to the application.
+**Notes on publicStars.teamCode and userId:**
+*   Added in v1.6 for Team View functionality.
+*   `teamCode` is normalized (trimmed and uppercased) to match the format stored in `profiles.optionalInfo.teamCode`.
+*   `userId` enables deduplication when users create multiple profiles with the same team code.
+*   Legacy stars (created before v1.6) will have `null` values for these fields and appear as white dots only.
 
-### 10. Future Improvements & Considerations
+### 8. Known Issues \u0026 Setup Requirements
 
-*   **CRITICAL - Firestore Security Rules:** This is the highest priority security vulnerability. The default Firestore rules are insecure and will cause permission errors in the app. You **MUST** replace them with the rules below before the application will function correctly.
+1.  **Legacy Data Migration (High Priority):**
+    *   **Problem:** Profiles created prior to v1.3 **do not** have the profileCode field stored in Firestore.
+    *   **Symptom:** Users with older profiles will see a blank space where the code should be on the Results screen, and these users will not be filterable in Q7Dash.
+    *   **Fix Required:** A one-time Cloud Function or Admin Script must be run to iterate over all existing profiles documents, recalculate the code based on the stored nswers, and write the profileCode field back to the document.
 
-    **How to update your rules:**
-    1.  Go to your Firebase project console.
-    2.  Navigate to **Firestore Database** -> **Rules** tab.
-    3.  Delete the existing content and paste the entire block of code below.
-    4.  Click **Publish**.
+2.  **Profile Distortion Backfill (Medium Priority):**
+    *   **Problem:** Profiles created prior to v1.5 **do not** have the profileDistor field.
+    *   **Impact:** Admin Dashboard cannot display distortion metrics for legacy profiles.
+    *   **Fix:** Run a migration script to calculate and add profileDistor to existing profiles using their stored 
+ankedScores.
 
-    ```
-    rules_version = '2';
-    service cloud.firestore {
-      match /databases/{database}/documents {
-    
-        // Profiles can only be created, read, or updated by the user who owns them.
-        // Deletion is not allowed.
-        match /profiles/{profileId} {
-          // Allow a user to create a profile if they are logged in and the
-          // 'userId' in the new document matches their own user ID.
-          allow create: if request.auth != null && request.auth.uid == request.resource.data.userId;
-    
-          // Allow a user to read or update their own profile.
-          // This is used for loading the profile and for the "Forget me!" feature.
-          allow read, update: if request.auth != null && request.auth.uid == resource.data.userId;
-    
-          // Explicitly deny deletion to protect data.
-          allow delete: if false;
-        }
-    
-        // The collective map data is public.
-        // Anyone can read the star data and add their own anonymous star.
-        // No one can modify or delete existing stars.
-        match /publicStars/{starId} {
-          allow read, create: if true;
-          allow update, delete: if false;
-        }
-      }
-    }
-    ```
-    **Explanation:**
-    *   **`/profiles/{profileId}`:** These rules protect user data. They ensure that a user can only ever interact with their own profile documents. `request.resource.data` is used for `create` to check the incoming data, while `resource.data` is used for `read` and `update` to check the data that already exists in the database.
-    *   **`/publicStars/{starId}`:** These rules allow the "Collective Map" to work. The app writes anonymous star coordinates to this collection. It is safe for this to be public because it contains no personally identifiable information.
-*   **Collective Map Visualization:** The app calculates `starCoords` but does not yet implement the collective map. This is the most significant planned feature. It will require reading multiple profiles from Firestore and rendering them efficiently on a canvas.
-*   **Build Process:** The in-browser Babel transpilation is excellent for rapid prototyping but is not performant for production. The project should be migrated to a standard build tool like Vite or Create React App. This is now a requirement for securely handling the API key.
-*   **Admin Panel:** The admin configurations in `index.tsx` should be moved to a secure admin panel or a separate configuration document in Firestore to avoid direct code edits for simple changes.
+3.  **Team View Legacy Data (Low Priority):**
+    *   **Problem:** Stars created prior to v1.6 **do not** have `teamCode` or `userId` fields in `publicStars`.
+    *   **Impact:** Legacy stars will always appear as white dots, even if the original profile had a `teamCode`.
+    *   **Workaround:** Acceptable for MVP. New profiles will have full Team View functionality.
+    *   **Fix (Optional):** Cross-reference `profiles` collection to backfill `teamCode` and `userId` for existing `publicStars` documents.
+
+4.  **Firestore Security Rules:****
+    *   Ensure rules allow the Admin App (Q7Dash) to read these profiles (usually handled via Admin SDK or specific role-based rules), while strictly limiting Q7-Lite users to only reading/writing their *own* data.
+
+4.  **Environment Variables:**
+    *   Ensure .env files contain the correct Firebase keys for the production environment before building.
+
+---
+
+**End of Handoff**
