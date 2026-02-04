@@ -7,6 +7,16 @@
 ---
 
 ### Version History
+*   **v1.7 (2026-02-03):**
+    *   **SECURITY UPDATE:** Migrated proprietary Q7 algorithms from client-side to Firebase Cloud Functions.
+    *   **IP Protection:** All calculation logic (calculateProfile, generateProfileCode, calculateProfileDistortion, calculatePearsonCorrelation) now executes server-side only, preventing exposure of intellectual property.
+    *   **Cloud Functions Deployed:**
+        *   `processQ7Assessment` - Handles user profile creation from 7-question assessment
+        *   `updateVenueProfile` - Updates venue profiles based on visitor check-ins (Q7-FIKA)
+        *   `calculateVenueAlignment` - Calculates user-venue compatibility scores (Q7-FIKA)
+    *   **Firestore Security Rules:** Updated to prevent unauthorized client-side writes while maintaining admin exception for Q7-Admin CSV import.
+    *   **Frontend Changes:** Q7-PWA and Q7-FIKA refactored to call Cloud Functions instead of performing local calculations.
+    *   **Dependencies Added:** Firebase Functions SDK (firebase-functions-compat.js) added to index.html.
 *   **v1.6 (2026-01-22):**
     *   **New Feature:** Added **Team View** functionality to the StarMap visualization.
     *   **User Experience:** Users with a `teamCode` can now see their team members' stars displayed as full-size static gold stars (30px, using StarIcon component) overlaid on the general population (white dots, 6px) when clicking "View StarMap".
@@ -69,17 +79,37 @@ The application includes user authentication, allowing users to save their profi
 *   index.html: Main entry point.
 *   index.tsx: **Core Logic.** Contains all React components, state, Firebase logic, and math algorithms.
 *   index.css: Tailwind CSS imports and custom styling.
-*   irebase.json: Configuration for hosting targets.
-*   ite.config.ts: Build configuration.
+*   firebase.json: Configuration for hosting targets.
+*   vite.config.ts: Build configuration.
 
 ### 5. Core Logic Breakdown
 
-#### Profile Calculation
-The logic acts as the \"source of truth\" for the user's profile type:
-1.  calculateProfile(answers): Returns 
-ankedScores (1-10 scale) and starCoords ({x, y}).
-2.  generateProfileCode(rankedScores): Generates the string (e.g., \"912837465\"). **Crucially, this is now executed before saving to Firestore, not just during display.**
-3.  **v1.5:** calculateProfileDistortion(rankedScores): Calculates the Profile Distortion Index by measuring the average absolute difference between consecutive dimension values in the circular Q7 model. This provides a data quality metric.
+#### Profile Calculation (v1.7: Now Server-Side)
+**IMPORTANT:** As of v1.7, all proprietary calculation logic has been migrated to Firebase Cloud Functions for IP protection. The client-side code no longer contains these algorithms.
+
+**Cloud Functions:**
+1. **processQ7Assessment** - Replaces client-side profile creation:
+   - Input: 7 raw answers (0-100 scale), userId, optionalInfo
+   - Executes: calculateProfile(), generateProfileCode(), calculateProfileDistortion()
+   - Output: profileCode, profileId, rankedScores, starCoords
+   - Writes to: `profiles` and `publicStars` collections using Admin SDK
+
+2. **updateVenueProfile** (Q7-FIKA) - Handles venue profiling:
+   - Input: venueId, userId
+   - Fetches all visits for venue, averages visitor profiles
+   - Generates venue profileCode from averaged scores
+   - Updates venue document with rankedScores and profileCode
+
+3. **calculateVenueAlignment** (Q7-FIKA) - Calculates compatibility:
+   - Input: userId, venueId
+   - Executes: calculatePearsonCorrelation() on user and venue profiles
+   - Output: alignment score (-1 to 1)
+
+**Client-Side Integration:**
+- Q7-PWA calls `processQ7Assessment` via `firebase.functions().httpsCallable()`
+- Q7-FIKA calls `updateVenueProfile` and `calculateVenueAlignment` for map features
+- All functions are publicly callable (required for new user registration)
+- Expected latency: ~200-500ms per Cloud Function call
 
 #### Profile Distortion Index
 **Purpose:** Identifies potentially unreliable or rushed responses by measuring profile smoothness.
@@ -94,31 +124,30 @@ ankedScores (1-10 scale) and starCoords ({x, y}).
 
 **Theoretical Range:** 0-9 (typical range: 2-6)
 
-**Implementation:**
-`	ypescript
-const calculateProfileDistortion = (rankedScores: number[]): number =\u003e {
-    const differences: number[] = [];
-    for (let i = 0; i \u003c rankedScores.length; i++) {
-        const current = rankedScores[i];
-        const next = rankedScores[(i + 1) % rankedScores.length];
-        differences.push(Math.abs(current - next));
-    }
-    const sum = differences.reduce((acc, val) =\u003e acc + val, 0);
-    const average = sum / differences.length;
-    return Number(average.toFixed(2));
-};
-`
+**Implementation:** Now executed server-side in `processQ7Assessment` Cloud Function.
 
 ### 6. Firebase Integration
 
 *   **Initialization:** Config is loaded via import.meta.env variables.
+*   **Cloud Functions (v1.7):**
+    *   **Location:** `functions/index.js` (Node.js 24, 2nd Gen)
+    *   **Region:** us-central1
+    *   **Authentication:** All functions allow public access (required for new user registration)
+    *   **Admin SDK:** Functions use Admin SDK to bypass Firestore security rules
+    *   **Deployment:** `firebase deploy --only functions`
+*   **Firestore Security Rules (v1.7):**
+    *   **File:** `firestore.rules`
+    *   **Profiles:** Client-side writes blocked; only Cloud Functions can create/update
+    *   **Venues:** Client can create and increment visitCount; profile updates via Cloud Function only
+    *   **PublicStars:** Client-side writes blocked; handled by processQ7Assessment
+    *   **Admin Exception:** `clctvr@gmail.com` has full read/write access for Q7-Admin CSV import
 *   **Data Model (profiles collection):**
     *   Each document represents a user profile.
     *   **New Field (v1.3):** profileCode (String) is now mandatory for new records.
     *   **New Field (v1.5):** profileDistor (Number) stores the Profile Distortion Index.
 *   **Hosting Architecture:**
     *   The project uses Firebase Hosting Targets.
-    *   Target pp: Deploys Q7-Lite (User App).
+    *   Target `app`: Deploys Q7-Lite (User App).
     *   (Separate Target): Deploys Q7Dash (Admin Dashboard).
 
 ### 7. Firestore Data Schema
