@@ -14,3 +14,6 @@ functions/lib/
 # Temporary files
 *.docx
 temp_*.txt
+
+# Admin scripts (contains email)
+set-admin-claim.cjs
