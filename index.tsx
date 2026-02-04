@@ -1060,6 +1060,12 @@ const App = () => {
 
         try {
             // Call processQ7Assessment Cloud Function
+            console.log('Calling processQ7Assessment Cloud Function with:', {
+                answersLength: answersToSave.length,
+                userId: userToSave?.uid,
+                hasOptionalInfo: !!sanitizedInfo
+            });
+
             const processQ7 = firebase.functions().httpsCallable('processQ7Assessment');
             const result = await processQ7({
                 answers: answersToSave,
@@ -1067,6 +1073,7 @@ const App = () => {
                 userId: userToSave?.uid || null,
             });
 
+            console.log('Cloud Function response:', result);
             ({ profileCode, profileId, rankedScores, starCoords } = result.data);
 
             // Set docRef for compatibility with existing code
@@ -1075,7 +1082,13 @@ const App = () => {
 
         } catch (error) {
             console.error('Error saving profile to Firestore:', error);
-            alert("There was a problem saving your profile. Please check your internet connection and try again.");
+            console.error('Error details:', {
+                message: error.message,
+                code: error.code,
+                details: error.details,
+                stack: error.stack
+            });
+            alert(`There was a problem saving your profile. Error: ${error.message || 'Unknown error'}. Please check the console for details.`);
             setIsSaving(false); // Ensure spinner is turned off on failure.
             return; // Halt execution if the primary save fails.
         }
