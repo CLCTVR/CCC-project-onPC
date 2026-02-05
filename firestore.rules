@@ -32,14 +32,20 @@ service cloud.firestore {
       );
 
       // ============================================================================
-      // WRITE PERMISSIONS: BLOCKED FOR IP PROTECTION
+      // WRITE PERMISSIONS: RESTRICTED FOR IP PROTECTION
       // ============================================================================
       // NO client-side profile creation - must use processQ7Assessment Cloud Function
       // This prevents exposure of calculateProfile, generateProfileCode algorithms
       allow create: if false;
       
-      // NO client-side updates/deletes - profiles are immutable after Cloud Function creation
-      allow update, delete: if false;
+      // Allow users to archive their own profiles (Forget Me functionality)
+      // ONLY isArchived and archivedAt fields can be updated by the owner
+      allow update: if isOwner() 
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isArchived', 'archivedAt'])
+                    && request.resource.data.isArchived == true;
+      
+      // NO deletes
+      allow delete: if false;
     }
     
     // ============================================================================
