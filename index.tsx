@@ -12,6 +12,8 @@ declare const firebase: any;
 const REQUIRE_AUTH_TO_VIEW_RESULTS = true;
 // Cooldown in hours before a user can "forget" their profile and create a new one.
 const PROFILE_CREATION_COOLDOWN_HOURS = 720; // 30 days
+// TEST MODE: Set to true to bypass cooldown for testing (SET TO FALSE IN PRODUCTION!)
+const TEST_MODE_BYPASS_COOLDOWN = false;
 
 
 // --- Firebase Initialization ---
@@ -397,6 +399,7 @@ const AuthScreen = ({ setAuthError, authError, onBack, onSuccessfulVerifiedLogin
                     <input
                         type="email"
                         placeholder="Email"
+                        autoComplete="username"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         required
@@ -407,6 +410,7 @@ const AuthScreen = ({ setAuthError, authError, onBack, onSuccessfulVerifiedLogin
                             <input
                                 type={showPassword ? 'text' : 'password'}
                                 placeholder="Password"
+                                autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
