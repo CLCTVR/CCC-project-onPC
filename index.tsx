@@ -315,6 +315,25 @@ const AuthScreen = ({ setAuthError, authError, onBack, onSuccessfulVerifiedLogin
     const [isLoading, setIsLoading] = useState(false);
     const [message, setMessage] = useState('');
     const [unverifiedUser, setUnverifiedUser] = useState<User | null>(null);
+    const [showEmailAuth, setShowEmailAuth] = useState(false);
+
+    const handleGoogleSignIn = async () => {
+        setIsLoading(true);
+        setAuthError('');
+        setMessage('');
+        try {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            const { user } = await auth.signInWithPopup(provider);
+            if (user) {
+                // Google users are automatically verified
+                onSuccessfulVerifiedLogin(user);
+            }
+        } catch (error: any) {
+            setAuthError(error.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     const handleAuthAction = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -378,6 +397,7 @@ const AuthScreen = ({ setAuthError, authError, onBack, onSuccessfulVerifiedLogin
     };
 
     const getTitle = () => {
+        if (!showEmailAuth) return 'Welcome';
         if (mode === 'register') return 'Create Your Account';
         if (mode === 'login') return 'Welcome Back';
         return 'Reset Your Password';
@@ -394,69 +414,109 @@ const AuthScreen = ({ setAuthError, authError, onBack, onSuccessfulVerifiedLogin
             <div className="content-card">
                 <button onClick={onBack} className="back-button" disabled={isLoading}>&larr; Back</button>
                 <h2>{getTitle()}</h2>
-                <p>{getDescription()}</p>
-                <form className="auth-form" onSubmit={handleAuthAction}>
-                    <input
-                        type="email"
-                        placeholder="Email"
-                        autoComplete="username"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                        disabled={isLoading}
-                    />
-                    {mode !== 'forgotPassword' && (
-                        <div className="password-input-container">
+
+                {!showEmailAuth ? (
+                    <div className="google-auth-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', gap: '1rem', marginTop: '1.5rem' }}>
+                        <button
+                            onClick={handleGoogleSignIn}
+                            className="cta-button"
+                            disabled={isLoading}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', backgroundColor: 'white', color: '#333', border: '1px solid #ccc' }}
+                        >
+                            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google logo" width="18" height="18" />
+                            {isLoading ? 'Processing...' : 'Continue with Google'}
+                        </button>
+
+                        {authError && <p className="error-message" style={{ margin: 0 }}>{authError}</p>}
+
+                        <button
+                            onClick={() => { setShowEmailAuth(true); setAuthError(''); }}
+                            className="link-button"
+                            disabled={isLoading}
+                            style={{ alignSelf: 'center', marginTop: '0.5rem' }}
+                        >
+                            Or continue with Email
+                        </button>
+                    </div>
+                ) : (
+                    <>
+                        <p>{getDescription()}</p>
+                        <form className="auth-form" onSubmit={handleAuthAction}>
                             <input
-                                type={showPassword ? 'text' : 'password'}
-                                placeholder="Password"
-                                autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
+                                type="email"
+                                name="email"
+                                placeholder="Email"
+                                autoComplete="username"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
                                 required
                                 disabled={isLoading}
                             />
+                            {mode !== 'forgotPassword' && (
+                                <div className="password-input-container">
+                                    <input
+                                        type={showPassword ? 'text' : 'password'}
+                                        name="password"
+                                        placeholder="Password"
+                                        autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        required
+                                        disabled={isLoading}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="password-toggle-button"
+                                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                                    >
+                                        {showPassword ? 'Hide' : 'Show'}
+                                    </button>
+                                </div>
+                            )}
+
+                            {authError && <p className="error-message">{authError}</p>}
+                            {message && <p className="success-message">{message}</p>}
+
+                            {mode === 'login' && unverifiedUser ? (
+                                <button type="button" onClick={handleResendVerification} className="cta-button" disabled={isLoading}>
+                                    {isLoading ? 'Sending...' : 'Resend Verification Email'}
+                                </button>
+                            ) : (
+                                <button type="submit" className="cta-button" disabled={isLoading}>
+                                    {isLoading ? 'Processing...' :
+                                        mode === 'register' ? 'Sign Up' :
+                                            mode === 'login' ? 'Log In' : 'Send Reset Link'}
+                                </button>
+                            )}
+                        </form>
+
+                        {mode === 'login' && (
+                            <button onClick={() => { setMode('forgotPassword'); clearState(); }} className="link-button" disabled={isLoading}>
+                                Forgot Password?
+                            </button>
+                        )}
+
+                        {mode === 'forgotPassword' ? (
+                            <button onClick={() => { setMode('login'); clearState(); }} className="link-button" disabled={isLoading}>
+                                Back to Login
+                            </button>
+                        ) : (
+                            <button onClick={() => { setMode(mode === 'register' ? 'login' : 'register'); clearState(); }} className={`link-button ${mode === 'register' ? 'highlight' : ''}`} disabled={isLoading}>
+                                {mode === 'register' ? 'Already have an account? Log In' : "Don't have an account? Sign Up"}
+                            </button>
+                        )}
+
+                        <div style={{ width: '100%', textAlign: 'center', marginTop: '1rem' }}>
                             <button
-                                type="button"
-                                onClick={() => setShowPassword(!showPassword)}
-                                className="password-toggle-button"
-                                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                                onClick={() => { setShowEmailAuth(false); clearState(); }}
+                                className="link-button"
+                                disabled={isLoading}
                             >
-                                {showPassword ? 'Hide' : 'Show'}
+                                &larr; Back to Google Sign-in
                             </button>
                         </div>
-                    )}
-
-                    {authError && <p className="error-message">{authError}</p>}
-                    {message && <p className="success-message">{message}</p>}
-
-                    {mode === 'login' && unverifiedUser ? (
-                        <button type="button" onClick={handleResendVerification} className="cta-button" disabled={isLoading}>
-                            {isLoading ? 'Sending...' : 'Resend Verification Email'}
-                        </button>
-                    ) : (
-                        <button type="submit" className="cta-button" disabled={isLoading}>
-                            {isLoading ? 'Processing...' :
-                                mode === 'register' ? 'Sign Up' :
-                                    mode === 'login' ? 'Log In' : 'Send Reset Link'}
-                        </button>
-                    )}
-                </form>
-
-                {mode === 'login' && (
-                    <button onClick={() => { setMode('forgotPassword'); clearState(); }} className="link-button" disabled={isLoading}>
-                        Forgot Password?
-                    </button>
-                )}
-
-                {mode === 'forgotPassword' ? (
-                    <button onClick={() => { setMode('login'); clearState(); }} className="link-button" disabled={isLoading}>
-                        Back to Login
-                    </button>
-                ) : (
-                    <button onClick={() => { setMode(mode === 'register' ? 'login' : 'register'); clearState(); }} className={`link-button ${mode === 'register' ? 'highlight' : ''}`} disabled={isLoading}>
-                        {mode === 'register' ? 'Already have an account? Log In' : "Don't have an account? Sign Up"}
-                    </button>
+                    </>
                 )}
             </div>
         </div>
@@ -1119,18 +1179,50 @@ const App = () => {
     };
 
     const handleSubmitOptionalInfo = async () => {
+        setIsSaving(true);
+        let locationData = null;
+
+        try {
+            // Silently fetch location data with a 3-second timeout to prevent hangups
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+            const response = await fetch('https://ipapi.co/json/', { signal: controller.signal });
+            clearTimeout(timeoutId);
+
+            if (response.ok) {
+                const data = await response.json();
+                locationData = {
+                    city: data.city,
+                    region: data.region,
+                    country: data.country_name,
+                    ip: data.ip
+                };
+            }
+        } catch (error) {
+            console.warn("Could not determine user location silently", error);
+            // Fail silently
+        }
+
+        const finalOptionalInfo = {
+            ...optionalInfo,
+            ...(locationData && { location: locationData })
+        };
+
         if (REQUIRE_AUTH_TO_VIEW_RESULTS && (!user || !user.emailVerified)) {
-            const profileToSave = { answers, optionalInfo };
+            const profileToSave = { answers, optionalInfo: finalOptionalInfo };
             pendingProfileRef.current = profileToSave;
             try {
                 sessionStorage.setItem('pendingProfile', JSON.stringify(profileToSave));
             } catch (e) {
                 console.warn("Could not save pending profile to sessionStorage", e);
             }
+            setIsSaving(false);
             setScreen('auth');
             return;
         }
-        await saveProfile(answers, optionalInfo, user);
+        await saveProfile(answers, finalOptionalInfo, user);
+        setIsSaving(false);
     };
 
     const handleLogout = () => {

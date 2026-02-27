@@ -1,12 +1,22 @@
 ﻿# Development Handoff: Q7-Lite (formerly Collectiver Culture Compass)
 
-**Version:** 1.6
-**Handoff Date:** 2026-01-22 21:40
+**Version:** 1.9
+**Handoff Date:** 2026-02-26
 **Point of Contact:** Product Manager
 
 ---
 
 ### Version History
+*   **v1.9 (2026-02-26):**
+    *   **New Feature:** Added silent IP Geolocation tracking during initial user profile creation.
+    *   **Implementation:** The 'Optional Information' submission flow now executes a background fetch to `ipapi.co` to capture the user's approximate geographical location.
+    *   **Data Structure:** Captures `city`, `region` (state/province), `country`, and `ip`. Data is appended securely within the `optionalInfo` map in the `profiles` Firestore collection without requiring any Cloud Function modifications.
+    *   **User Experience:** Process is completely invisible. It adds zero friction and handles API failures silently without preventing successful registration.
+*   **v1.8 (2026-02-26):**
+    *   **Authentication Update:** Implemented a new "Google-first" authentication flow.
+    *   **UI Changes:** The `AuthScreen` now prioritizes a prominent "Continue with Google" button. The traditional Email/Password login fields are hidden by default but can be accessed via an "Or continue with Email" toggle link.
+    *   **Verification Bypass:** Users authenticating via Google bypass the internal email verification check, as Google handles email verification natively.
+    *   **Domain Configuration:** Updated `VITE_FIREBASE_AUTH_DOMAIN` from `q7-web-app1.firebaseapp.com` to `app.truvtus.com` to ensure the correct domain is displayed on the Google OAuth consent screen.
 *   **v1.7 (2026-02-03):**
     *   **SECURITY UPDATE:** Migrated proprietary Q7 algorithms from client-side to Firebase Cloud Functions.
     *   **IP Protection:** All calculation logic (calculateProfile, generateProfileCode, calculateProfileDistortion, calculatePearsonCorrelation) now executes server-side only, preventing exposure of intellectual property.
