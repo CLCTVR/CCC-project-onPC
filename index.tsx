@@ -107,13 +107,14 @@ declare global {
 //
 // This protects intellectual property from browser-based reverse engineering.
 
-type Screen = 'welcome' | 'questionnaire' | 'optionalInfo' | 'results' | 'auth' | 'error';
+type Screen = 'welcome' | 'questionnaire' | 'optionalInfo' | 'results' | 'auth' | 'error' | 'anonymousPreview' | 'validationEdgeCase';
 type OptionalInfo = {
     name: string;
     birthYear: string;
     education: string;
     source: string;
     teamCode?: string;
+    isGuest?: boolean;
 };
 // Use a generic 'any' type for the user object as we are not importing Firebase types directly.
 type User = any;
@@ -305,9 +306,10 @@ type AuthScreenProps = {
     authError: string;
     onBack: () => void;
     onSuccessfulVerifiedLogin: (user: User) => void;
+    onGuestLogin: () => void;
 };
 
-const AuthScreen = ({ setAuthError, authError, onBack, onSuccessfulVerifiedLogin }: AuthScreenProps) => {
+const AuthScreen = ({ setAuthError, authError, onBack, onSuccessfulVerifiedLogin, onGuestLogin }: AuthScreenProps) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -328,6 +330,21 @@ const AuthScreen = ({ setAuthError, authError, onBack, onSuccessfulVerifiedLogin
                 // Google users are automatically verified
                 onSuccessfulVerifiedLogin(user);
             }
+        } catch (error: any) {
+            setAuthError(error.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleGuestSignIn = async () => {
+        setIsLoading(true);
+        setAuthError('');
+        setMessage('');
+        try {
+            // Wait for anonymous sign in
+            await auth.signInAnonymously();
+            onGuestLogin();
         } catch (error: any) {
             setAuthError(error.message);
         } finally {
@@ -397,7 +414,7 @@ const AuthScreen = ({ setAuthError, authError, onBack, onSuccessfulVerifiedLogin
     };
 
     const getTitle = () => {
-        if (!showEmailAuth) return 'Welcome';
+        if (!showEmailAuth) return 'Your Profile is Ready!';
         if (mode === 'register') return 'Create Your Account';
         if (mode === 'login') return 'Welcome Back';
         return 'Reset Your Password';
@@ -417,6 +434,10 @@ const AuthScreen = ({ setAuthError, authError, onBack, onSuccessfulVerifiedLogin
 
                 {!showEmailAuth ? (
                     <div className="google-auth-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', gap: '1rem', marginTop: '1.5rem' }}>
+                        <p style={{ margin: '-1rem 0 0.5rem 0', color: 'var(--text-secondary)', fontSize: '0.95rem', textAlign: 'center' }}>
+                            Sign in to save your results and access the Truvtus Map.
+                        </p>
+
                         <button
                             onClick={handleGoogleSignIn}
                             className="cta-button"
@@ -424,7 +445,7 @@ const AuthScreen = ({ setAuthError, authError, onBack, onSuccessfulVerifiedLogin
                             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', backgroundColor: 'white', color: '#333', border: '1px solid #ccc' }}
                         >
                             <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google logo" width="18" height="18" />
-                            {isLoading ? 'Processing...' : 'Continue with Google'}
+                            {isLoading ? 'Processing...' : 'Sign in with Google'}
                         </button>
 
                         {authError && <p className="error-message" style={{ margin: 0 }}>{authError}</p>}
@@ -433,10 +454,29 @@ const AuthScreen = ({ setAuthError, authError, onBack, onSuccessfulVerifiedLogin
                             onClick={() => { setShowEmailAuth(true); setAuthError(''); }}
                             className="link-button"
                             disabled={isLoading}
-                            style={{ alignSelf: 'center', marginTop: '0.5rem' }}
+                            style={{ alignSelf: 'center', marginTop: '0' }}
                         >
-                            Or continue with Email
+                            Use another email
                         </button>
+
+                        <div style={{ display: 'flex', alignItems: 'center', width: '100%', margin: '0.5rem 0' }}>
+                            <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255, 255, 255, 0.2)' }}></div>
+                            <span style={{ padding: '0 1rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>or</span>
+                            <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255, 255, 255, 0.2)' }}></div>
+                        </div>
+
+                        <button
+                            onClick={handleGuestSignIn}
+                            className="cta-button"
+                            disabled={isLoading}
+                            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', backgroundColor: 'rgba(71, 167, 221, 0.15)', color: 'var(--havelock-blue)', border: '1px solid rgba(71, 167, 221, 0.4)', width: '100%', padding: '0.9rem' }}
+                        >
+                            {isLoading ? 'Processing...' : 'Continue as Guest'}
+                        </button>
+
+                        <p style={{ fontSize: '0.95rem', color: 'var(--text-secondary)', textAlign: 'center', margin: '0', maxWidth: '90%' }}>
+                            Guest profiles are temporary and will not be saved.
+                        </p>
                     </div>
                 ) : (
                     <>
@@ -828,6 +868,146 @@ const ResultsScreen = ({ optionalInfo, profileData, profileInfo, onForget, notif
     );
 };
 
+// --- START: Anonymous Preview & Edge Case Screens ---
+const ValidationEdgeCaseScreen = () => {
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            window.location.href = 'https://app.truvtus.com';
+        }, 4000);
+        return () => clearTimeout(timer);
+    }, []);
+
+    return (
+        <div className="screen edge-case-screen" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '2rem', textAlign: 'center' }}>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: 500, lineHeight: 1.5 }}>
+                Hmm… Something doesn't add up. To give you a profile you can actually use, I need a clearer picture of what matters to you. Let's try that again.
+            </h2>
+        </div>
+    );
+};
+
+const AnonymousPreviewScreen = ({ profileData, onSignIn }: { profileData: any, onSignIn: () => void }) => {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const chartRef = useRef<HTMLCanvasElement>(null);
+    const chartInstance = useRef<any>(null);
+    const [containerSize, setContainerSize] = useState({ width: 300, height: 300 });
+
+    useEffect(() => {
+        const updateSize = () => {
+            if (containerRef.current) {
+                const width = containerRef.current.clientWidth;
+                setContainerSize({ width, height: width });
+            }
+        };
+
+        window.addEventListener('resize', updateSize);
+        updateSize();
+
+        return () => window.removeEventListener('resize', updateSize);
+    }, []);
+
+    useEffect(() => {
+        if (chartRef.current && profileData) {
+            const ctx = chartRef.current.getContext('2d');
+            if (ctx) {
+                if (chartInstance.current) {
+                    chartInstance.current.destroy();
+                }
+
+                chartInstance.current = new window.Chart(ctx, {
+                    type: 'radar',
+                    data: {
+                        labels: VALUE_LABELS,
+                        datasets: [{
+                            data: profileData.rankedScores,
+                            backgroundColor: 'rgba(240, 196, 25, 0.4)',
+                            borderColor: 'rgb(240, 196, 25)',
+                            borderWidth: 2,
+                            pointBackgroundColor: 'rgb(240, 196, 25)',
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        scales: {
+                            r: {
+                                startAngle: 20,
+                                beginAtZero: true,
+                                max: 10,
+                                grid: { color: 'rgba(255, 255, 255, 0.2)' },
+                                pointLabels: { color: 'white', font: { size: 12 } },
+                                angleLines: { color: 'rgba(255, 255, 255, 0.2)' },
+                                ticks: { display: false, stepSize: 2 }
+                            }
+                        },
+                        plugins: { legend: { display: false } }
+                    }
+                });
+            }
+        }
+    }, [profileData, containerSize]);
+
+    const getStarPosition = (x: number, y: number, containerSize: number) => {
+        const radius = containerSize / 2 * 0.8;
+        const maxCoordinateValue = 25;
+        const scaleFactor = radius / maxCoordinateValue;
+        const left = (containerSize / 2) + x * scaleFactor;
+        const top = (containerSize / 2) - y * scaleFactor;
+        return { top: `${top}px`, left: `${left}px` };
+    };
+
+    const backgroundStars = useMemo(() => Array.from({ length: 15 }).map(() => ({
+        left: `${Math.random() * 100}%`,
+        top: `${Math.random() * 100}%`,
+        animationDelay: `${Math.random() * 3}s`,
+        animationDuration: `${2 + Math.random() * 3}s`
+    })), []);
+
+    const archetype = useMemo(() => {
+        const x = profileData.starCoords.x;
+        const y = profileData.starCoords.y;
+        if (x >= 0 && y >= 0) return { title: 'The Altruist', desc: "As an Altruist, you are motivated by the welfare of others and the protection of the environment. You value social justice, equality, and a world at peace, and you aren't afraid to challenge the status quo to achieve those ends.\nIf I were you, I’d probably excel as a Non-Profit Leader, Sustainability Consultant, or Human Rights Advocate. I would likely avoid roles like Debt Collector or High-Pressure Luxury Sales, where the focus on individual profit might clash with your core values." };
+        if (x >= 0 && y < 0) return { title: 'The Neighbor', desc: "As a Neighbour, you are driven by a sense of belonging and the desire to build something that lasts. You value the ‘tried and true’, and the warmth of a stable community. You are the glue that holds groups together, prioritizing the needs of the collective and the preservation of meaningful rituals.\nIf I were you, I’d probably excel as a Community Organizer, Family Physician, or Small Business Owner where continuity and trust are paramount. I would likely avoid roles as a Digital Nomad or Startup Founder, where constant upheaval and lack of roots could feel deeply unsettling." };
+        if (x < 0 && y < 0) return { title: 'The Professional', desc: "As a Professional, you are driven by personal success and the competent demonstration of your skills. You value social status, prestige, and efficiency, appreciating the stability and order that allow you to advance in life.\nIf I were you, I’d probably excel as a Sales Executive, Real Estate Broker, or Project Manager, where results are measurable and rewarded. I would likely avoid roles in Social Work or Philosophical Research, where the lack of clear hierarchy or financial benchmarks might feel frustrating." };
+        return { title: 'The Enthusiast', desc: "As an Enthusiast, you are driven by the \"new\"—new ideas, new flavors, and new perspectives. You value your independence and the freedom to choose your own path over following the crowd.\nIf I were you, I’d probably excel as an Entrepreneur, Creative Director, or Investigative Journalist, where your need for autonomy and novelty is an asset. I would likely avoid roles like Quality Compliance or Traditional Accounting, where rigid rules and repetitive routines might feel like a cage." };
+    }, [profileData]);
+
+    if (!profileData) return null;
+    const userStarPosition = getStarPosition(profileData.starCoords.x, profileData.starCoords.y, containerSize.width);
+
+    return (
+        <div className="screen results-screen anonymous-preview-screen">
+            <h2>Your Profile Preview</h2>
+
+            <div className="chart-container" ref={containerRef} style={{ pointerEvents: 'none' }}>
+                {backgroundStars.map((style, i) => <div key={i} className="background-star" style={style}></div>)}
+                <canvas ref={chartRef} width={containerSize.width} height={containerSize.height} className="blur-profile"></canvas>
+                <div className="user-star-container" style={userStarPosition} title="Your Archetype">
+                    <div className="star-highlight" />
+                    <StarIcon className="user-star" />
+                </div>
+            </div>
+
+            <div className="archetype-info" style={{ marginTop: '2rem', textAlign: 'center', padding: '0 1rem' }}>
+                <h3 style={{ color: '#F0C419', marginBottom: '1rem', fontSize: '1.4rem' }}>{archetype.title}</h3>
+                {archetype.desc.split('\n').map((para, i) => (
+                    <p key={i} style={{ marginBottom: '1rem', fontSize: '0.95rem', lineHeight: '1.5', opacity: 0.9 }}>{para}</p>
+                ))}
+            </div>
+
+            <div style={{ marginTop: '2rem', width: '100%', display: 'flex', flexDirection: 'column', gap: '1.5rem', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)', padding: '1.5rem', borderRadius: '8px' }}>
+                <p style={{ fontSize: '0.85rem', color: '#F0C419', textAlign: 'center', margin: 0, opacity: 0.9 }}>
+                    Your Guest Profile is temporary and anonymous. To lock in your Star and unlock the full power of Truvtus, you’ll need to sign in and reconfirm your inputs so we can calculate your permanent, encrypted profile.
+                </p>
+                <button onClick={onSignIn} className="cta-button" style={{ width: '100%' }}>
+                    OK, let me sign in now
+                </button>
+            </div>
+        </div>
+    );
+};
+// --- END: Anonymous Preview & Edge Case Screens ---
+
 const App = () => {
     const [screen, setScreen] = useState<Screen>('welcome');
     const [answers, setAnswers] = useState<number[]>(Array(QUESTIONS.length).fill(50));
@@ -946,7 +1126,7 @@ const App = () => {
         const unsubscribe = auth.onAuthStateChanged(async (currentUser: User | null) => {
             try {
                 setUser(currentUser);
-                if (currentUser && currentUser.emailVerified) {
+                if (currentUser && (currentUser.emailVerified || currentUser.isAnonymous)) {
                     if (pendingProfileRef.current) {
                         await processPendingProfile(currentUser);
                     } else {
@@ -978,7 +1158,12 @@ const App = () => {
                                 // Defensively set optionalInfo to prevent crashes if it's missing
                                 setOptionalInfo(activeProfile.optionalInfo || { name: '', birthYear: '', education: '', source: '', teamCode: '' });
                                 setProfileInfo({ id: activeProfile.id, createdAt: activeProfile.createdAt });
-                                setScreen('results');
+
+                                if (currentUser.isAnonymous) {
+                                    setScreen('anonymousPreview');
+                                } else {
+                                    setScreen('results');
+                                }
                             } else {
                                 // User has profiles, but all are archived.
                                 resetQuestionnaire();
@@ -1115,6 +1300,7 @@ const App = () => {
             ...infoToSave,
             name: infoToSave.name.trim(),
             teamCode: infoToSave.teamCode ? infoToSave.teamCode.trim().toUpperCase() : '',
+            ...(userToSave?.isAnonymous && { isGuest: true }),
         };
 
         // ============================================================================
@@ -1161,10 +1347,14 @@ const App = () => {
         if (!options.forceArchive) {
             setProfileData({ rankedScores, starCoords, profileCode });
             setOptionalInfo(sanitizedInfo);
-            if (userToSave) {
+            if (userToSave && !userToSave.isAnonymous) {
                 setProfileInfo({ id: docRef.id, createdAt: new Date() });
             }
-            setScreen('results');
+            if (userToSave && userToSave.isAnonymous) {
+                setScreen('anonymousPreview');
+            } else {
+                setScreen('results');
+            }
         }
         setIsSaving(false);
 
@@ -1180,6 +1370,14 @@ const App = () => {
 
     const handleSubmitOptionalInfo = async () => {
         setIsSaving(true);
+
+        const isStraightLining = answers.every(val => val === 50);
+        if (isStraightLining) {
+            setIsSaving(false);
+            setScreen('validationEdgeCase');
+            return;
+        }
+
         let locationData = null;
 
         try {
@@ -1209,7 +1407,7 @@ const App = () => {
             ...(locationData && { location: locationData })
         };
 
-        if (REQUIRE_AUTH_TO_VIEW_RESULTS && (!user || !user.emailVerified)) {
+        if (REQUIRE_AUTH_TO_VIEW_RESULTS && (!user || !(user.emailVerified || user.isAnonymous))) {
             const profileToSave = { answers, optionalInfo: finalOptionalInfo };
             pendingProfileRef.current = profileToSave;
             try {
@@ -1281,12 +1479,19 @@ const App = () => {
     }
 
     const renderScreen = () => {
-        const showAuthWarning = REQUIRE_AUTH_TO_VIEW_RESULTS && (!user || !user.emailVerified);
+        const showAuthWarning = REQUIRE_AUTH_TO_VIEW_RESULTS && (!user || !(user.emailVerified || user.isAnonymous));
         switch (screen) {
             case 'welcome': return <WelcomeScreen onStart={handleStart} />;
             case 'questionnaire': return <QuestionnaireScreen currentQuestionIndex={currentQuestionIndex} questionOrder={questionOrder} answers={answers} onAnswerChange={handleAnswerChange} onNextQuestion={handleNextQuestion} />;
             case 'optionalInfo': return <OptionalInfoScreen optionalInfo={optionalInfo} isSaving={isSaving} onInfoChange={handleOptionalInfoChange} onSubmit={handleSubmitOptionalInfo} showAuthWarning={showAuthWarning} />;
-            case 'auth': return <AuthScreen setAuthError={setAuthError} authError={authError} onBack={() => setScreen('optionalInfo')} onSuccessfulVerifiedLogin={handleSuccessfulVerifiedLogin} />;
+            case 'auth': return <AuthScreen setAuthError={setAuthError} authError={authError} onBack={() => setScreen('optionalInfo')} onSuccessfulVerifiedLogin={handleSuccessfulVerifiedLogin} onGuestLogin={() => {
+                const currentUser = auth.currentUser;
+                if (currentUser && currentUser.isAnonymous) {
+                    handleSuccessfulVerifiedLogin(currentUser);
+                }
+            }} />;
+            case 'anonymousPreview': return <AnonymousPreviewScreen profileData={profileData} onSignIn={() => setScreen('auth')} />;
+            case 'validationEdgeCase': return <ValidationEdgeCaseScreen />;
             case 'results': return <ResultsScreen optionalInfo={optionalInfo} profileData={profileData} profileInfo={profileInfo} onForget={handleForgetProfile} notification={notification} setNotification={setNotification} />;
             case 'error': return <ErrorScreen message={dataError} onLogout={handleLogout} />;
             default: return <WelcomeScreen onStart={handleStart} />;

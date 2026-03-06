@@ -1,4 +1,4 @@
-﻿# Development Handoff: Q7-Lite (formerly Collectiver Culture Compass)
+# Development Handoff: Q7-Lite (formerly Collectiver Culture Compass)
 
 **Version:** 1.9
 **Handoff Date:** 2026-02-26
@@ -7,6 +7,11 @@
 ---
 
 ### Version History
+*   **v1.10 (2026-03-05):**
+    *   **New Feature:** Added "Anonymous Preview" (Guest Flow) to allow users to view a blurred, simplified profile before committing to creating an account.
+    *   **Authentication Update:** Implemented Firebase Anonymous Authentication (`auth.signInAnonymously()`) attached to a new "Continue as Guest" button on the Auth Screen.
+    *   **Data Structure:** Guest profiles are saved via the normal Cloud Function process but append an `{isGuest: true}` flag inside the `optionalInfo` map for easy Firestore console filtering.
+    *   **New Feature:** Added a global "All-50s" edge case intercept. If a user (guest or registered) submits all 50s on the assessment, the frontend immediately intercepts the save, displays a validation warning, and redirects to app.truvtus.com after 4 seconds to protect data integrity.
 *   **v1.9 (2026-02-26):**
     *   **New Feature:** Added silent IP Geolocation tracking during initial user profile creation.
     *   **Implementation:** The 'Optional Information' submission flow now executes a background fetch to `ipapi.co` to capture the user's approximate geographical location.
@@ -172,12 +177,10 @@ The application includes user authentication, allowing users to save their profi
 ankedScores | Array\u003cnumber\u003e          | Calculated scores [1-10].                                                 |
 | starCoords   | Map {x, y}             | Calculated coordinates.                                                   |
 | profileCode  | string                 | **(Critical)** The unique 9-digit code. Stored for Admin Analytics.       |
-| profileDistor| 
-umber                 | **(v1.5)** Profile Distortion Index (2-6 typical). Lower = more reliable. |
-| optionalInfo | Map                    | Includes 
-ame, irthYear, education, source, and **	eamCode**.  |
+| profileDistor| number                 | **(v1.5)** Profile Distortion Index (2-6 typical). Lower = more reliable. |
+| optionalInfo | Map                    | Includes name, birthYear, education, source, **isGuest**, and **teamCode**.  |
 | createdAt    | Timestamp              | Creation date.                                                            |
-| isArchived   | oolean                | 	rue if \"forgotten\".                                                    |
+| isArchived   | boolean                | true if "forgotten".                                                    | 	rue if \"forgotten\".                                                    |
 
 **Notes on optionalInfo.teamCode:**
 *   Added in v1.4.
@@ -224,3 +227,4 @@ ankedScores.
 ---
 
 **End of Handoff**
+
