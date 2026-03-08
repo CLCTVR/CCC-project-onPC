@@ -7,6 +7,11 @@
 ---
 
 ### Version History
+*   **v1.11 (2026-03-07):**
+    *   **Bug Fix:** Addressed a critical parsing error stemming from the v1.7 backend migration. The client `index.tsx` map logic was patched to fall back to `data.x` and `data.y` if the legacy `data.starCoords` object was absent, restoring visibility to all post-v1.7 profiles on the StarMap.
+    *   **New Feature:** Added an Anonymous StarMap Viewer to the Guest Flow. The `<AnonymousPreviewScreen>` component now features a "View StarMap" overlay toggle (reusing the logic from the Results screen) allowing guests to view public population data.
+    *   **Data Validation:** Guests entering a `teamCode` successfully hit the `publicStars` repository and properly deduplicate/color their matching teammates gold alongside the general population noise.
+    *   **UI/UX:** Updated cosmetic copy strings across the `OptionalInfoScreen` label bindings.
 *   **v1.10 (2026-03-05):**
     *   **New Feature:** Added "Anonymous Preview" (Guest Flow) to allow users to view a blurred, simplified profile before committing to creating an account.
     *   **Authentication Update:** Implemented Firebase Anonymous Authentication (`auth.signInAnonymously()`) attached to a new "Continue as Guest" button on the Auth Screen.

@@ -233,7 +233,10 @@ const OptionalInfoScreen = ({ optionalInfo, isSaving, onInfoChange, onSubmit, sh
     <div className="screen optional-info-screen">
         <div className="content-card">
             <h2>Optional Information</h2>
-            <p>This helps us build a more accurate collective map. All data is anonymous.</p>
+            <p>
+                This helps personalize your Truvtus results.<br />
+                All data is anonymous.
+            </p>
             <form className="optional-form">
                 <label htmlFor="name">Your Name (Optional)</label>
                 <input
@@ -275,12 +278,12 @@ const OptionalInfoScreen = ({ optionalInfo, isSaving, onInfoChange, onSubmit, sh
                     <option value="other">Other</option>
                 </select>
 
-                <label htmlFor="teamCode">Ref.Code (if provided)</label>
+                <label htmlFor="teamCode">Shared Code (for Partners)</label>
                 <input
                     type="text"
                     name="teamCode"
                     id="teamCode"
-                    placeholder="e.g. ProjectAlpha2024"
+                    placeholder="Enter a unique code to see how your Stars align"
                     value={optionalInfo.teamCode || ''}
                     onChange={onInfoChange}
                     disabled={isSaving}
@@ -605,8 +608,15 @@ const ResultsScreen = ({ optionalInfo, profileData, profileInfo, onForget, notif
                     const snapshot = await db.collection('publicStars').orderBy('createdAt', 'desc').limit(500).get();
                     const starsData = snapshot.docs.map(doc => {
                         const data = doc.data();
+
+                        // Handle both old schema (data.starCoords) and new schema (data.x, data.y)
+                        let coords = data.starCoords;
+                        if (!coords && typeof data.x === 'number' && typeof data.y === 'number') {
+                            coords = { x: data.x, y: data.y };
+                        }
+
                         return {
-                            starCoords: data.starCoords as StarCoords,
+                            starCoords: coords as StarCoords,
                             teamCode: data.teamCode || null,
                             userId: data.userId || null,
                             createdAt: data.createdAt
@@ -886,11 +896,16 @@ const ValidationEdgeCaseScreen = () => {
     );
 };
 
-const AnonymousPreviewScreen = ({ profileData, onSignIn }: { profileData: any, onSignIn: () => void }) => {
+const AnonymousPreviewScreen = ({ profileData, onSignIn, optionalInfo }: { profileData: any, onSignIn: () => void, optionalInfo: OptionalInfo }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<HTMLCanvasElement>(null);
     const chartInstance = useRef<any>(null);
     const [containerSize, setContainerSize] = useState({ width: 300, height: 300 });
+
+    const [isStarMapVisible, setIsStarMapVisible] = useState(false);
+    const [allStars, setAllStars] = useState<(StarCoords & { teamCode?: string | null, userId?: string | null, createdAt?: any, animationDelay: string, animationDuration: string })[]>([]);
+    const [isMapLoading, setIsMapLoading] = useState(false);
+    const [mapError, setMapError] = useState<string | null>(null);
 
     useEffect(() => {
         const updateSize = () => {
@@ -905,6 +920,53 @@ const AnonymousPreviewScreen = ({ profileData, onSignIn }: { profileData: any, o
 
         return () => window.removeEventListener('resize', updateSize);
     }, []);
+
+    useEffect(() => {
+        // Only fetch the map data if the user wants to see it.
+        if (isStarMapVisible && allStars.length === 0 && !isMapLoading) {
+            const fetchStars = async () => {
+                setIsMapLoading(true);
+                setMapError(null);
+                try {
+                    const snapshot = await db.collection('publicStars').orderBy('createdAt', 'desc').limit(500).get();
+                    const starsData = snapshot.docs.map(doc => {
+                        const data = doc.data();
+
+                        // Handle both old schema (data.starCoords) and new schema (data.x, data.y)
+                        let coords = data.starCoords;
+                        if (!coords && typeof data.x === 'number' && typeof data.y === 'number') {
+                            coords = { x: data.x, y: data.y };
+                        }
+
+                        return {
+                            starCoords: coords as StarCoords,
+                            teamCode: data.teamCode || null,
+                            userId: data.userId || null,
+                            createdAt: data.createdAt
+                        };
+                    });
+                    const starsWithAnimation = starsData
+                        .filter(star => star.starCoords && typeof star.starCoords.x === 'number' && typeof star.starCoords.y === 'number')
+                        .map(star => ({
+                            x: star.starCoords.x,
+                            y: star.starCoords.y,
+                            teamCode: star.teamCode,
+                            userId: star.userId,
+                            createdAt: star.createdAt,
+                            animationDelay: `${Math.random() * 3}s`,
+                            animationDuration: `${2 + Math.random() * 3}s`
+                        }));
+                    setAllStars(starsWithAnimation);
+                } catch (err) {
+                    console.error("Error fetching stars from publicStars:", err);
+                    setMapError("Could not load the StarMap data.");
+                } finally {
+                    setIsMapLoading(false);
+                }
+            };
+            fetchStars();
+        }
+    }, [isStarMapVisible]);
 
     useEffect(() => {
         if (chartRef.current && profileData) {
@@ -979,16 +1041,92 @@ const AnonymousPreviewScreen = ({ profileData, onSignIn }: { profileData: any, o
         <div className="screen results-screen anonymous-preview-screen">
             <h2>Your Profile Preview</h2>
 
-            <div className="chart-container" ref={containerRef} style={{ pointerEvents: 'none' }}>
+            <div className="chart-container" ref={containerRef} style={{ pointerEvents: 'none', position: 'relative' }}>
                 {backgroundStars.map((style, i) => <div key={i} className="background-star" style={style}></div>)}
                 <canvas ref={chartRef} width={containerSize.width} height={containerSize.height} className="blur-profile"></canvas>
+
+                {/* --- START: Added StarMap Overlay Logic --- */}
+                {isStarMapVisible && (
+                    <>
+                        {isMapLoading && <div className="loading-spinner-small"></div>}
+                        {mapError && <p className="error-message">{mapError}</p>}
+                        {(() => {
+                            const userTeamCode = optionalInfo.teamCode?.trim().toUpperCase();
+
+                            // Deduplicate team members: keep only most recent star per userId
+                            const deduplicatedStars = userTeamCode ? allStars.reduce((acc, star) => {
+                                const isTeamMember = star.teamCode?.trim().toUpperCase() === userTeamCode;
+
+                                if (!isTeamMember) {
+                                    // Not a team member, keep as-is
+                                    return [...acc, { ...star, isTeamMember: false }];
+                                }
+
+                                if (!star.userId) {
+                                    // Team member but no userId (legacy data), keep it
+                                    return [...acc, { ...star, isTeamMember: true }];
+                                }
+
+                                // Team member with userId - check for duplicates
+                                const existingIndex = acc.findIndex(s => s.userId === star.userId && s.isTeamMember);
+                                if (existingIndex === -1) {
+                                    // First occurrence of this userId
+                                    return [...acc, { ...star, isTeamMember: true }];
+                                }
+
+                                // Duplicate found - keep the most recent one
+                                const existing = acc[existingIndex];
+                                const starTime = star.createdAt?.toDate ? star.createdAt.toDate().getTime() : 0;
+                                const existingTime = existing.createdAt?.toDate ? existing.createdAt.toDate().getTime() : 0;
+
+                                if (starTime > existingTime) {
+                                    // Current star is newer, replace existing
+                                    return [...acc.slice(0, existingIndex), { ...star, isTeamMember: true }, ...acc.slice(existingIndex + 1)];
+                                }
+
+                                // Existing star is newer, keep it
+                                return acc;
+                            }, [] as (typeof allStars[0] & { isTeamMember: boolean })[]) : allStars.map(star => ({ ...star, isTeamMember: false }));
+
+                            return deduplicatedStars.map((star, i) => {
+                                if (star.isTeamMember) {
+                                    // Team member: render as full-size gold star (no pulsing)
+                                    return (
+                                        <div key={i} className="team-star-container" style={getStarPosition(star.x, star.y, containerSize.width)}>
+                                            <StarIcon className="team-star" />
+                                        </div>
+                                    );
+                                } else {
+                                    // Non-team member: render as white dot
+                                    return (
+                                        <div
+                                            key={i}
+                                            className="collective-star"
+                                            style={{
+                                                ...getStarPosition(star.x, star.y, containerSize.width),
+                                                animationDelay: star.animationDelay,
+                                                animationDuration: star.animationDuration,
+                                            }}
+                                        ></div>
+                                    );
+                                }
+                            });
+                        })()}
+                    </>
+                )}
+                {/* --- END: Added StarMap Overlay Logic --- */}
+
                 <div className="user-star-container" style={userStarPosition} title="Your Archetype">
                     <div className="star-highlight" />
                     <StarIcon className="user-star" />
                 </div>
             </div>
 
-            <div className="archetype-info" style={{ marginTop: '2rem', textAlign: 'center', padding: '0 1rem' }}>
+            <button onClick={() => setIsStarMapVisible(!isStarMapVisible)} className="starmap-toggle-button">
+                {isStarMapVisible ? "Hide StarMap" : "View StarMap"}
+            </button>
+
+            <div className="archetype-info" style={{ marginTop: '0', textAlign: 'center', padding: '0 1rem' }}>
                 <h3 style={{ color: '#F0C419', marginBottom: '1rem', fontSize: '1.4rem' }}>{archetype.title}</h3>
                 {archetype.desc.split('\n').map((para, i) => (
                     <p key={i} style={{ marginBottom: '1rem', fontSize: '0.95rem', lineHeight: '1.5', opacity: 0.9 }}>{para}</p>
@@ -1490,7 +1628,7 @@ const App = () => {
                     handleSuccessfulVerifiedLogin(currentUser);
                 }
             }} />;
-            case 'anonymousPreview': return <AnonymousPreviewScreen profileData={profileData} onSignIn={() => setScreen('auth')} />;
+            case 'anonymousPreview': return <AnonymousPreviewScreen profileData={profileData} onSignIn={() => setScreen('auth')} optionalInfo={optionalInfo} />;
             case 'validationEdgeCase': return <ValidationEdgeCaseScreen />;
             case 'results': return <ResultsScreen optionalInfo={optionalInfo} profileData={profileData} profileInfo={profileInfo} onForget={handleForgetProfile} notification={notification} setNotification={setNotification} />;
             case 'error': return <ErrorScreen message={dataError} onLogout={handleLogout} />;
