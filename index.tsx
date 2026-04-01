@@ -71,7 +71,7 @@ const QUESTIONS = [
     { q: "Would your Best Friend rather work for a charity - or lead a successful company?", a: "Work for charity", b: "Lead a company" },
     { q: "Would your Best Friend rather end world poverty - or receive the Nobel Prize?", a: "End poverty", b: "Receive the Nobel" },
     { q: "Would your Best Friend rather win Gold at the Olympics - or coach the local soccer team?", a: "Win Gold", b: "Coach local team" },
-    { q: "Would your Best Friend rather dress for comfort - or dress appropriately?", a: "Dress for comfort", b: "Dress appropriately" },
+    { q: "Would your Best Friend rather eat the cake - or wait for the host to start the meal?", a: "Eat cake", b: "Wait for host" },
     { q: "Would your Best Friend rather attend a religious service - or go bungee jumping?", a: "Attend church", b: "Bungee jumping" },
     { q: "Would your Best Friend rather freelance - or work a steady 9-to-5 job?", a: "Freelance", b: "Steady 9-to-5" },
     { q: "Would your Best Friend rather go on an adventure - or enjoy a safe trip?", a: "Adventure", b: "Safe trip" }
