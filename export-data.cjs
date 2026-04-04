@@ -73,6 +73,7 @@ async function exportProfiles() {
         rankedScore_HE: data.rankedScores?.[6] || null,
         rankedScore_ST: data.rankedScores?.[7] || null,
         rankedScore_SD: data.rankedScores?.[8] || null,
+        profileDistor: data.profileDistor || null,
       };
       profilesData.push(flattenedProfile);
     });

@@ -7,6 +7,8 @@
 ---
 
 ### Version History
+*   **v1.12 (2026-04-04):**
+    *   **Data Export Enhancements:** Updated the local `export-data.cjs` Node script to include the `profileDistor` (Profile Distortion Index) field when generating the CSV export mapping, maintaining parity with the Firestore database structure.
 *   **v1.11 (2026-03-07):**
     *   **Bug Fix:** Addressed a critical parsing error stemming from the v1.7 backend migration. The client `index.tsx` map logic was patched to fall back to `data.x` and `data.y` if the legacy `data.starCoords` object was absent, restoring visibility to all post-v1.7 profiles on the StarMap.
     *   **New Feature:** Added an Anonymous StarMap Viewer to the Guest Flow. The `<AnonymousPreviewScreen>` component now features a "View StarMap" overlay toggle (reusing the logic from the Results screen) allowing guests to view public population data.
