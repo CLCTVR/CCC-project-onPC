@@ -447,14 +447,12 @@ main {
 }
 
 .link-button.highlight {
+  color: var(--gold-accent);
+  text-decoration: underline;
   animation-name: highlight-once;
   animation-duration: 0.5s;
-  /* Make each flash a little faster */
   animation-timing-function: ease-in-out;
   animation-iteration-count: 3;
-  /* Run it twice */
-  animation-delay: 1s;
-  /* Wait half a second before the first flash */
 }
 
 /* Error Screen */
@@ -614,18 +612,20 @@ main {
 }
 
 .forget-button {
-  background-color: var(--error-red);
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 .forget-button:hover {
-  background-color: #c0392b;
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  color: var(--text-light) !important;
+  border-color: var(--text-light) !important;
 }
 
 .forget-button:disabled {
-  background-color: var(--error-red);
-  opacity: 0.5;
+  opacity: 0.3;
   cursor: not-allowed;
-  transform: translateY(0);
+  pointer-events: none;
 }
 
 .cooldown-message {
@@ -770,19 +770,17 @@ main {
 
 @keyframes highlight-once {
   0% {
-    color: var(--text-secondary);
+    color: var(--gold-accent);
     transform: scale(1);
   }
 
   50% {
-    color: var(--gold-accent);
-    /* Glows gold in the middle */
-    transform: scale(1.05);
-    /* Gets slightly larger */
+    color: var(--text-light); /* Flash pure white */
+    transform: scale(1.5);
   }
 
   100% {
-    color: var(--text-secondary);
+    color: var(--gold-accent);
     transform: scale(1);
   }
 }
@@ -810,3 +808,80 @@ main {
 }
 
 /* --- END: Anonymous Preview Styles --- */
+
+/* ============================================================================ */
+/* CHEKTUS MODAL STYLES */
+/* ============================================================================ */
+
+.chektus-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.85); /* Darker overlay for focus */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.chektus-modal {
+    background-color: #1a2035;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 2rem;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    backdrop-filter: blur(10px);
+}
+
+.chektus-modal h3 {
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+    color: #f0c419;
+    font-size: 1.5rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.chektus-trigger-button {
+  border-color: var(--gold-accent);
+  color: var(--gold-accent);
+  font-weight: bold;
+}
+
+.chektus-trigger-button:hover {
+  background-color: var(--gold-accent);
+  color: var(--dark-background);
+  border-color: var(--gold-accent);
+}
+
+.gold-cta-button {
+  background-color: var(--gold-accent) !important;
+  color: var(--dark-background) !important;
+  border: none;
+  padding: 1rem 2rem;
+  font-size: 1rem;
+  font-weight: bold;
+  border-radius: 30px;
+  cursor: pointer;
+  transition: transform 0.2s, background-color 0.2s, color 0.2s;
+  width: 100%;
+}
+
+.gold-cta-button:hover {
+  filter: brightness(1.1);
+  transform: translateY(-2px);
+}
+
+.gold-cta-button:disabled {
+  background-color: var(--gold-accent);
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: translateY(0);
+}

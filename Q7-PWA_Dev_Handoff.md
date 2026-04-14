@@ -7,6 +7,12 @@
 ---
 
 ### Version History
+*   **v1.13 (2026-04-14):**
+    *   **New Feature:** Integrated **ChekTus v2.1** (Group Alignment Utility). Replaced the legacy StarMap toggle with a dedicated algorithmic session management interface.
+    *   **Backend Architecture:** Deployed a new Cloud Function (`calculateChekTusScore`) to execute proprietary Pearson correlation arrays strictly server-side.
+    *   **Optimization:** Avoided Firebase strict Composite Index limitations by sorting timestamps using robust in-memory Node.js processing rather than DB queries.
+    *   **UI/UX Polish:** Introduced a distinct Brand Gold / Yellow (`var(--gold-accent)`) styling theme across the ChekTus flow. Repaired extreme UX friction during the Guest-to-Registered user flow by synchronously caching the `pendingProfileRef` state hook, seamlessly preserving guest test answers across Firebase Auth sign-up redirects without database loss. Improved button animations padding normalizations.
+    *   **Database Integration:** Hardened `firestore.rules` for the new `CT_Sessions` collection to restrict access. Switched ChekTus room creation logic from 5-digit alphanumeric strings to secure 4-digit pure numeric inputs.
 *   **v1.12 (2026-04-04):**
     *   **Data Export Enhancements:** Updated the local `export-data.cjs` Node script to include the `profileDistor` (Profile Distortion Index) field when generating the CSV export mapping, maintaining parity with the Firestore database structure.
 *   **v1.11 (2026-03-07):**

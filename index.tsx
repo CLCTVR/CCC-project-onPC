@@ -15,6 +15,10 @@ const PROFILE_CREATION_COOLDOWN_HOURS = 720; // 30 days
 // TEST MODE: Set to true to bypass cooldown for testing (SET TO FALSE IN PRODUCTION!)
 const TEST_MODE_BYPASS_COOLDOWN = false;
 
+// --- ChekTus Admin Configuration ---
+const CHEKTUS_MAX_PARTICIPANTS = 10;
+const CHEKTUS_TTL_MINUTES = 30;
+
 
 // --- Firebase Initialization ---
 // The firebaseConfig object is now loaded from `firebase-config.js` into window.firebaseConfig
@@ -310,9 +314,10 @@ type AuthScreenProps = {
     onBack: () => void;
     onSuccessfulVerifiedLogin: (user: User) => void;
     onGuestLogin: () => void;
+    authOrigin: 'welcome' | 'optionalInfo' | 'anonymousPreview';
 };
 
-const AuthScreen = ({ setAuthError, authError, onBack, onSuccessfulVerifiedLogin, onGuestLogin }: AuthScreenProps) => {
+const AuthScreen = ({ setAuthError, authError, onBack, onSuccessfulVerifiedLogin, onGuestLogin, authOrigin }: AuthScreenProps) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -417,7 +422,11 @@ const AuthScreen = ({ setAuthError, authError, onBack, onSuccessfulVerifiedLogin
     };
 
     const getTitle = () => {
-        if (!showEmailAuth) return 'Your Profile is Ready!';
+        if (!showEmailAuth) {
+             if (authOrigin === 'welcome') return 'Welcome Back';
+             if (authOrigin === 'anonymousPreview') return 'Sign in to save your Profile';
+             return 'Sign in to see your Results';
+        }
         if (mode === 'register') return 'Create Your Account';
         if (mode === 'login') return 'Welcome Back';
         return 'Reset Your Password';
@@ -438,7 +447,9 @@ const AuthScreen = ({ setAuthError, authError, onBack, onSuccessfulVerifiedLogin
                 {!showEmailAuth ? (
                     <div className="google-auth-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', gap: '1rem', marginTop: '1.5rem' }}>
                         <p style={{ margin: '-1rem 0 0.5rem 0', color: 'var(--text-secondary)', fontSize: '0.95rem', textAlign: 'center' }}>
-                            Sign in to save your results and access the Truvtus Map.
+                            {authOrigin === 'welcome' ? 'Sign in to view your dashboard and the Truvtus MAPP.' : 
+                             authOrigin === 'anonymousPreview' ? 'and access the Truvtus MAPP.' : 
+                             'Sign in to save your results and access the Truvtus MAPP.'}
                         </p>
 
                         <button
@@ -586,21 +597,173 @@ type ResultsScreenProps = {
     onForget: () => void;
     notification: string | null;
     setNotification: (msg: string | null) => void;
+    user: User | null;
 };
 
-const ResultsScreen = ({ optionalInfo, profileData, profileInfo, onForget, notification, setNotification }: ResultsScreenProps) => {
+const getChekTusColor = (alignment: number) => {
+    if (alignment > 0.70) return '#FF3366';    // Perfect! (Love Red)
+    if (alignment > 0.40) return '#FF668B';    // High (Light Pink-Red)
+    if (alignment > 0.10) return '#FF99B0';    // Okay.. (Pastel Pink)
+    if (alignment > -0.20) return '#FFCCD8';   // Low (Very Pale Pink)
+    return '#FFFFFF';                          // Meh... (Pure White)
+};
+
+const ResultsScreen = ({ optionalInfo, profileData, profileInfo, onForget, notification, setNotification, user }: ResultsScreenProps) => {
     const chartRef = useRef<HTMLCanvasElement>(null);
     const chartInstance = useRef<ChartJsInstance | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
-    const [isStarMapVisible, setIsStarMapVisible] = useState(false);
     const [allStars, setAllStars] = useState<(StarCoords & { teamCode?: string | null, userId?: string | null, createdAt?: any, animationDelay: string, animationDuration: string })[]>([]);
     const [isMapLoading, setIsMapLoading] = useState(false);
     const [mapError, setMapError] = useState<string | null>(null);
 
+    // --- ChekTus State ---
+    const [activeSessionCode, setActiveSessionCode] = useState<string | null>(null);
+    const [ctSessionData, setCtSessionData] = useState<any | null>(null);
+    const [ctModalVisible, setCtModalVisible] = useState(false);
+    const [joinCodeInput, setJoinCodeInput] = useState('');
+    const [ctLoading, setCtLoading] = useState(false);
+    const [ctError, setCtError] = useState('');
+    const [participantStars, setParticipantStars] = useState<StarCoords[]>([]);
+
     useEffect(() => {
-        // Only fetch the map data if the user wants to see it.
-        if (isStarMapVisible && allStars.length === 0 && !isMapLoading) {
+        if (!ctSessionData || !ctSessionData.participants) return;
+        
+        let isMounted = true;
+        const fetchParticipantStars = async () => {
+             const stars: StarCoords[] = [];
+             for (const uid of ctSessionData.participants) {
+                 if (uid === user?.uid) continue; // we already render ourselves
+                 
+                 try {
+                     const snap = await db.collection("profiles").where("userId", "==", uid).get();
+                     if (!snap.empty) {
+                         const docs = snap.docs.map((d: any) => d.data());
+                         docs.sort((a: any,b: any) => {
+                              const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+                              const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+                              return timeB - timeA;
+                         });
+                         if (docs[0].starCoords) {
+                             stars.push(docs[0].starCoords);
+                         }
+                     }
+                 } catch (e) {
+                     console.warn("Could not fetch participant star", e);
+                 }
+             }
+             if (isMounted) setParticipantStars(stars);
+        };
+        fetchParticipantStars();
+        return () => { isMounted = false; };
+    }, [ctSessionData?.participants?.length]);
+
+    // Real-time ChekTus Session Listener
+    useEffect(() => {
+        if (!activeSessionCode) return;
+        const unsubscribe = db.collection('CT_Sessions').doc(activeSessionCode).onSnapshot((doc: any) => {
+            if (doc.exists) {
+                // Check TTL
+                const data = doc.data();
+                if (data.createdAt) {
+                    const createdMs = data.createdAt.toDate ? data.createdAt.toDate().getTime() : data.createdAt;
+                    if (Date.now() - createdMs > CHEKTUS_TTL_MINUTES * 60000) {
+                        setCtError("Session expired.");
+                        setActiveSessionCode(null);
+                        setCtSessionData(null);
+                        return;
+                    }
+                }
+                setCtSessionData(data);
+            } else {
+                setCtError("Session no longer exists.");
+                setActiveSessionCode(null);
+                setCtSessionData(null);
+            }
+        });
+        return () => unsubscribe();
+    }, [activeSessionCode]);
+
+    const handleCreateSession = async () => {
+        if (!user || !user.uid) { setCtError("Must be logged in."); return; }
+        setCtLoading(true); setCtError('');
+        try {
+            // Generate a 4-digit random numeric code
+            const code = Math.floor(1000 + Math.random() * 9000).toString();
+            await db.collection("CT_Sessions").doc(code).set({
+                hostUid: user.uid,
+                participants: [user.uid],
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                calculationComplete: false,
+                finalScore: 0
+            });
+            setActiveSessionCode(code);
+            setCtModalVisible(false);
+        } catch (err: any) {
+            setCtError(err.message);
+        } finally {
+            setCtLoading(false);
+        }
+    };
+
+    const handleJoinSession = async () => {
+        if (!user || !user.uid) { setCtError("Must be logged in."); return; }
+        if (!joinCodeInput.trim() || joinCodeInput.length !== 4) {
+            setCtError("Please enter a valid 4-digit code.");
+            return;
+        }
+        setCtLoading(true); setCtError('');
+        try {
+            const code = joinCodeInput.trim();
+            const docRef = db.collection("CT_Sessions").doc(code);
+            const docSnap = await docRef.get();
+            if (!docSnap.exists) throw new Error("Session not found.");
+            
+            const data = docSnap.data();
+
+            // Explicitly check TTL before joining to show error in popup instantly
+            if (data.createdAt) {
+                const createdMs = data.createdAt.toDate ? data.createdAt.toDate().getTime() : data.createdAt;
+                if (Date.now() - createdMs > CHEKTUS_TTL_MINUTES * 60000) {
+                    throw new Error("Session expired.");
+                }
+            }
+
+            if (data.participants && data.participants.includes(user.uid)) {
+                setActiveSessionCode(code);
+                setCtModalVisible(false);
+                return;
+            }
+            if (data.participants && data.participants.length >= CHEKTUS_MAX_PARTICIPANTS) {
+                throw new Error(`Session full (Max ${CHEKTUS_MAX_PARTICIPANTS} participants).`);
+            }
+            await docRef.update({
+                participants: firebase.firestore.FieldValue.arrayUnion(user.uid)
+            });
+            setActiveSessionCode(code);
+            setCtModalVisible(false);
+        } catch (err: any) {
+            setCtError(err.message);
+        } finally {
+            setCtLoading(false);
+        }
+    };
+
+    const handleCalculateScore = async () => {
+        setCtLoading(true); setCtError('');
+        try {
+            const calculateChekTusScore = firebase.functions().httpsCallable('calculateChekTusScore');
+            await calculateChekTusScore({ sessionCode: activeSessionCode });
+        } catch (err: any) {
+            setCtError(err.message);
+        } finally {
+            setCtLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        // Fetch the map data on init
+        if (allStars.length === 0 && !isMapLoading) {
             const fetchStars = async () => {
                 setIsMapLoading(true);
                 setMapError(null);
@@ -643,7 +806,7 @@ const ResultsScreen = ({ optionalInfo, profileData, profileInfo, onForget, notif
             };
             fetchStars();
         }
-    }, [isStarMapVisible]); // This effect runs whenever isStarMapVisible changes.
+    }, []); // This effect runs on mount to fetch stars.
 
     useEffect(() => {
         const resizeObserver = new ResizeObserver(entries => {
@@ -774,74 +937,29 @@ const ResultsScreen = ({ optionalInfo, profileData, profileInfo, onForget, notif
                 <canvas ref={chartRef} width={containerSize.width} height={containerSize.height}></canvas>
 
                 {/* --- START: Added StarMap Overlay Logic --- */}
-                {isStarMapVisible && (
-                    <>
-                        {isMapLoading && <div className="loading-spinner-small"></div>}
-                        {mapError && <p className="error-message">{mapError}</p>}
-                        {(() => {
-                            const userTeamCode = optionalInfo.teamCode?.trim().toUpperCase();
-
-                            // Deduplicate team members: keep only most recent star per userId
-                            const deduplicatedStars = userTeamCode ? allStars.reduce((acc, star) => {
-                                const isTeamMember = star.teamCode?.trim().toUpperCase() === userTeamCode;
-
-                                if (!isTeamMember) {
-                                    // Not a team member, keep as-is
-                                    return [...acc, { ...star, isTeamMember: false }];
-                                }
-
-                                if (!star.userId) {
-                                    // Team member but no userId (legacy data), keep it
-                                    return [...acc, { ...star, isTeamMember: true }];
-                                }
-
-                                // Team member with userId - check for duplicates
-                                const existingIndex = acc.findIndex(s => s.userId === star.userId && s.isTeamMember);
-                                if (existingIndex === -1) {
-                                    // First occurrence of this userId
-                                    return [...acc, { ...star, isTeamMember: true }];
-                                }
-
-                                // Duplicate found - keep the most recent one
-                                const existing = acc[existingIndex];
-                                const starTime = star.createdAt?.toDate ? star.createdAt.toDate().getTime() : 0;
-                                const existingTime = existing.createdAt?.toDate ? existing.createdAt.toDate().getTime() : 0;
-
-                                if (starTime > existingTime) {
-                                    // Current star is newer, replace existing
-                                    return [...acc.slice(0, existingIndex), { ...star, isTeamMember: true }, ...acc.slice(existingIndex + 1)];
-                                }
-
-                                // Existing star is newer, keep it
-                                return acc;
-                            }, [] as (typeof allStars[0] & { isTeamMember: boolean })[]) : allStars.map(star => ({ ...star, isTeamMember: false }));
-
-                            return deduplicatedStars.map((star, i) => {
-                                if (star.isTeamMember) {
-                                    // Team member: render as full-size gold star (no pulsing)
-                                    return (
-                                        <div key={i} className="team-star-container" style={getStarPosition(star.x, star.y, containerSize.width)}>
-                                            <StarIcon className="team-star" />
-                                        </div>
-                                    );
-                                } else {
-                                    // Non-team member: render as white dot
-                                    return (
-                                        <div
-                                            key={i}
-                                            className="collective-star"
-                                            style={{
-                                                ...getStarPosition(star.x, star.y, containerSize.width),
-                                                animationDelay: star.animationDelay,
-                                                animationDuration: star.animationDuration,
-                                            }}
-                                        ></div>
-                                    );
-                                }
-                            });
-                        })()}
-                    </>
-                )}
+                <>
+                    {isMapLoading && <div className="loading-spinner-small"></div>}
+                    {mapError && <p className="error-message">{mapError}</p>}
+                    {/* The anonymous white background dots */}
+                    {allStars.map((star, i) => (
+                        <div
+                            key={i}
+                            className="collective-star"
+                            style={{
+                                ...getStarPosition(star.x, star.y, containerSize.width),
+                                animationDelay: star.animationDelay,
+                                animationDuration: star.animationDuration,
+                            }}
+                        ></div>
+                    ))}
+                    
+                    {/* The explicitly targeted ChekTus participants (Golden Stars) */}
+                    {participantStars.map((star, i) => (
+                        <div key={`p-${i}`} className="team-star-container" style={getStarPosition(star.x, star.y, containerSize.width)}>
+                            <StarIcon className="team-star" />
+                        </div>
+                    ))}
+                </>
                 {/* --- END: Added StarMap Overlay Logic --- */}
 
                 <div className="user-star-container" style={userStarPosition}>
@@ -850,22 +968,77 @@ const ResultsScreen = ({ optionalInfo, profileData, profileInfo, onForget, notif
                 </div>
             </div>
 
-            <button onClick={() => setIsStarMapVisible(!isStarMapVisible)} className="starmap-toggle-button">
-                {isStarMapVisible ? 'Hide StarMap' : 'View StarMap'}
-            </button>
-
             <div style={{ marginTop: '1.5rem', width: '100%', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center' }}>
+                
+                {/* --- START: ChekTus UI Logic --- */}
+                {activeSessionCode && ctSessionData ? (
+                    ctSessionData.calculationComplete ? (
+                        <button 
+                            className="starmap-toggle-button"
+                            style={{ backgroundColor: getChekTusColor(ctSessionData.finalScore), color: '#333', fontWeight: 'bold' }}
+                            disabled
+                        >
+                            {Math.round(ctSessionData.finalScore * 100)}% Alignment
+                        </button>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', width: '100%' }}>
+                            <p style={{ margin: 0, fontWeight: 'bold' }}>Session: {activeSessionCode}</p>
+                            <p style={{ margin: 0, fontSize: '0.9rem', color: '#ccc' }}>Waiting for calculation... ({ctSessionData.participants?.length || 1}/10 joined)</p>
+                            {ctSessionData.hostUid === user?.uid && (
+                                <button className="gold-cta-button" onClick={handleCalculateScore} disabled={ctLoading || ctSessionData.participants?.length < 2}>
+                                    {ctLoading ? '...' : `Calculate Score`}
+                                </button>
+                            )}
+                            {ctError && <p className="error-message">{ctError}</p>}
+                        </div>
+                    )
+                ) : (
+                    <button className="starmap-toggle-button chektus-trigger-button" onClick={() => setCtModalVisible(true)}>
+                        ChekTus
+                    </button>
+                )}
+
+                {/* The Modal */}
+                {ctModalVisible && (
+                    <div className="chektus-modal-overlay">
+                        <div className="chektus-modal">
+                            <h3>ChekTus</h3>
+                            <button className="gold-cta-button" onClick={handleCreateSession} disabled={ctLoading} style={{width: '100%'}}>
+                                Start New Session
+                            </button>
+                            <p style={{margin: '1rem 0'}}>— OR —</p>
+                            <input 
+                                type="text" 
+                                placeholder="Enter 4-digit code" 
+                                maxLength={4}
+                                value={joinCodeInput} 
+                                onChange={e => {
+                                    const val = e.target.value.replace(/\D/g, ''); // only allow digits
+                                    setJoinCodeInput(val);
+                                }}
+                                style={{textAlign: 'center', letterSpacing: '2px', padding: '0.6rem'}}
+                            />
+                            <button className="link-button" onClick={handleJoinSession} disabled={ctLoading || joinCodeInput.length !== 4} style={{marginTop: '0.5rem', backgroundColor: '#333', color: 'white', padding: '0.6rem', borderRadius: '4px'}}>
+                                Join Session
+                            </button>
+                            {ctError && <p className="error-message">{ctError}</p>}
+                            <button className="link-button" onClick={() => { setCtModalVisible(false); setCtError(''); }} style={{marginTop: '1rem'}}>Cancel</button>
+                        </div>
+                    </div>
+                )}
+                {/* --- END: ChekTus UI Logic --- */}
+
                 <a
                     href="https://map.truvtus.com"
                     className="cta-button"
-                    style={{ textDecoration: 'none', width: 'fit-content', padding: '0.8rem 2rem' }}
+                    style={{ textDecoration: 'none', width: 'fit-content', padding: '0.6rem 2rem', fontSize: '0.9rem', border: '1px solid transparent' }}
                 >
-                    Go to TRUVTUS Map
+                    Go to MAPP
                 </a>
 
                 {profileInfo && (
                     <div className="profile-actions" style={{ width: '100%', marginTop: '1rem' }}>
-                        <button onClick={onForget} className="cta-button forget-button" disabled={!canForget}>Forget me!</button>
+                        <button onClick={onForget} className="starmap-toggle-button forget-button" disabled={!canForget}>Forget me!</button>
                         {!canForget && (
                             <p className="cooldown-message" style={{ marginTop: '0.5rem', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
                                 You can update your profile after {cooldownMessage.split('after ')[1]}
@@ -902,7 +1075,6 @@ const AnonymousPreviewScreen = ({ profileData, onSignIn, optionalInfo }: { profi
     const chartInstance = useRef<any>(null);
     const [containerSize, setContainerSize] = useState({ width: 300, height: 300 });
 
-    const [isStarMapVisible, setIsStarMapVisible] = useState(false);
     const [allStars, setAllStars] = useState<(StarCoords & { teamCode?: string | null, userId?: string | null, createdAt?: any, animationDelay: string, animationDuration: string })[]>([]);
     const [isMapLoading, setIsMapLoading] = useState(false);
     const [mapError, setMapError] = useState<string | null>(null);
@@ -922,8 +1094,8 @@ const AnonymousPreviewScreen = ({ profileData, onSignIn, optionalInfo }: { profi
     }, []);
 
     useEffect(() => {
-        // Only fetch the map data if the user wants to see it.
-        if (isStarMapVisible && allStars.length === 0 && !isMapLoading) {
+        // Fetch the map data on init
+        if (allStars.length === 0 && !isMapLoading) {
             const fetchStars = async () => {
                 setIsMapLoading(true);
                 setMapError(null);
@@ -966,7 +1138,7 @@ const AnonymousPreviewScreen = ({ profileData, onSignIn, optionalInfo }: { profi
             };
             fetchStars();
         }
-    }, [isStarMapVisible]);
+    }, []);
 
     useEffect(() => {
         if (chartRef.current && profileData) {
@@ -1046,74 +1218,21 @@ const AnonymousPreviewScreen = ({ profileData, onSignIn, optionalInfo }: { profi
                 <canvas ref={chartRef} width={containerSize.width} height={containerSize.height} className="blur-profile"></canvas>
 
                 {/* --- START: Added StarMap Overlay Logic --- */}
-                {isStarMapVisible && (
-                    <>
-                        {isMapLoading && <div className="loading-spinner-small"></div>}
-                        {mapError && <p className="error-message">{mapError}</p>}
-                        {(() => {
-                            const userTeamCode = optionalInfo.teamCode?.trim().toUpperCase();
-
-                            // Deduplicate team members: keep only most recent star per userId
-                            const deduplicatedStars = userTeamCode ? allStars.reduce((acc, star) => {
-                                const isTeamMember = star.teamCode?.trim().toUpperCase() === userTeamCode;
-
-                                if (!isTeamMember) {
-                                    // Not a team member, keep as-is
-                                    return [...acc, { ...star, isTeamMember: false }];
-                                }
-
-                                if (!star.userId) {
-                                    // Team member but no userId (legacy data), keep it
-                                    return [...acc, { ...star, isTeamMember: true }];
-                                }
-
-                                // Team member with userId - check for duplicates
-                                const existingIndex = acc.findIndex(s => s.userId === star.userId && s.isTeamMember);
-                                if (existingIndex === -1) {
-                                    // First occurrence of this userId
-                                    return [...acc, { ...star, isTeamMember: true }];
-                                }
-
-                                // Duplicate found - keep the most recent one
-                                const existing = acc[existingIndex];
-                                const starTime = star.createdAt?.toDate ? star.createdAt.toDate().getTime() : 0;
-                                const existingTime = existing.createdAt?.toDate ? existing.createdAt.toDate().getTime() : 0;
-
-                                if (starTime > existingTime) {
-                                    // Current star is newer, replace existing
-                                    return [...acc.slice(0, existingIndex), { ...star, isTeamMember: true }, ...acc.slice(existingIndex + 1)];
-                                }
-
-                                // Existing star is newer, keep it
-                                return acc;
-                            }, [] as (typeof allStars[0] & { isTeamMember: boolean })[]) : allStars.map(star => ({ ...star, isTeamMember: false }));
-
-                            return deduplicatedStars.map((star, i) => {
-                                if (star.isTeamMember) {
-                                    // Team member: render as full-size gold star (no pulsing)
-                                    return (
-                                        <div key={i} className="team-star-container" style={getStarPosition(star.x, star.y, containerSize.width)}>
-                                            <StarIcon className="team-star" />
-                                        </div>
-                                    );
-                                } else {
-                                    // Non-team member: render as white dot
-                                    return (
-                                        <div
-                                            key={i}
-                                            className="collective-star"
-                                            style={{
-                                                ...getStarPosition(star.x, star.y, containerSize.width),
-                                                animationDelay: star.animationDelay,
-                                                animationDuration: star.animationDuration,
-                                            }}
-                                        ></div>
-                                    );
-                                }
-                            });
-                        })()}
-                    </>
-                )}
+                <>
+                    {isMapLoading && <div className="loading-spinner-small"></div>}
+                    {mapError && <p className="error-message">{mapError}</p>}
+                    {allStars.map((star, i) => (
+                        <div
+                            key={i}
+                            className="collective-star"
+                            style={{
+                                ...getStarPosition(star.x, star.y, containerSize.width),
+                                animationDelay: star.animationDelay,
+                                animationDuration: star.animationDuration,
+                            }}
+                        ></div>
+                    ))}
+                </>
                 {/* --- END: Added StarMap Overlay Logic --- */}
 
                 <div className="user-star-container" style={userStarPosition} title="Your Archetype">
@@ -1121,10 +1240,6 @@ const AnonymousPreviewScreen = ({ profileData, onSignIn, optionalInfo }: { profi
                     <StarIcon className="user-star" />
                 </div>
             </div>
-
-            <button onClick={() => setIsStarMapVisible(!isStarMapVisible)} className="starmap-toggle-button">
-                {isStarMapVisible ? "Hide StarMap" : "View StarMap"}
-            </button>
 
             <div className="archetype-info" style={{ marginTop: '0', textAlign: 'center', padding: '0 1rem' }}>
                 <h3 style={{ color: '#F0C419', marginBottom: '1rem', fontSize: '1.4rem' }}>{archetype.title}</h3>
@@ -1153,6 +1268,7 @@ const App = () => {
     const [profileData, setProfileData] = useState<{ rankedScores: number[], starCoords: StarCoords, profileCode?: string } | null>(null);
     const [optionalInfo, setOptionalInfo] = useState<OptionalInfo>({ name: '', birthYear: '', education: '', source: '', teamCode: '' });
     const [isSaving, setIsSaving] = useState(false);
+    const [authOrigin, setAuthOrigin] = useState<'welcome' | 'optionalInfo' | 'anonymousPreview'>('welcome');
 
     const [user, setUser] = useState<User | null>(null);
     const [isAuthLoading, setIsAuthLoading] = useState(true);
@@ -1554,6 +1670,7 @@ const App = () => {
                 console.warn("Could not save pending profile to sessionStorage", e);
             }
             setIsSaving(false);
+            setAuthOrigin('optionalInfo');
             setScreen('auth');
             return;
         }
@@ -1622,15 +1739,19 @@ const App = () => {
             case 'welcome': return <WelcomeScreen onStart={handleStart} />;
             case 'questionnaire': return <QuestionnaireScreen currentQuestionIndex={currentQuestionIndex} questionOrder={questionOrder} answers={answers} onAnswerChange={handleAnswerChange} onNextQuestion={handleNextQuestion} />;
             case 'optionalInfo': return <OptionalInfoScreen optionalInfo={optionalInfo} isSaving={isSaving} onInfoChange={handleOptionalInfoChange} onSubmit={handleSubmitOptionalInfo} showAuthWarning={showAuthWarning} />;
-            case 'auth': return <AuthScreen setAuthError={setAuthError} authError={authError} onBack={() => setScreen('optionalInfo')} onSuccessfulVerifiedLogin={handleSuccessfulVerifiedLogin} onGuestLogin={() => {
+            case 'auth': return <AuthScreen setAuthError={setAuthError} authError={authError} onBack={() => setScreen(authOrigin)} onSuccessfulVerifiedLogin={handleSuccessfulVerifiedLogin} onGuestLogin={() => {
                 const currentUser = auth.currentUser;
                 if (currentUser && currentUser.isAnonymous) {
                     handleSuccessfulVerifiedLogin(currentUser);
                 }
-            }} />;
-            case 'anonymousPreview': return <AnonymousPreviewScreen profileData={profileData} onSignIn={() => setScreen('auth')} optionalInfo={optionalInfo} />;
+            }} authOrigin={authOrigin} />;
+            case 'anonymousPreview': return <AnonymousPreviewScreen profileData={profileData} onSignIn={() => {
+                pendingProfileRef.current = { answers: [...answers], optionalInfo: { ...optionalInfo } };
+                setAuthOrigin('anonymousPreview');
+                setScreen('auth');
+            }} optionalInfo={optionalInfo} />;
             case 'validationEdgeCase': return <ValidationEdgeCaseScreen />;
-            case 'results': return <ResultsScreen optionalInfo={optionalInfo} profileData={profileData} profileInfo={profileInfo} onForget={handleForgetProfile} notification={notification} setNotification={setNotification} />;
+            case 'results': return <ResultsScreen optionalInfo={optionalInfo} profileData={profileData} profileInfo={profileInfo} onForget={handleForgetProfile} notification={notification} setNotification={setNotification} user={user} />;
             case 'error': return <ErrorScreen message={dataError} onLogout={handleLogout} />;
             default: return <WelcomeScreen onStart={handleStart} />;
         }
@@ -1638,7 +1759,7 @@ const App = () => {
 
     return (
         <div className="app-container">
-            <Header user={user} onLogout={handleLogout} onLogin={() => { setDataError(''); setScreen('auth'); }} />
+            <Header user={user} onLogout={handleLogout} onLogin={() => { setDataError(''); setAuthOrigin('welcome'); setScreen('auth'); }} />
             <main>
                 {renderScreen()}
             </main>

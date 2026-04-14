@@ -417,3 +417,107 @@ exports.calculateVenueAlignment = onCall(async (request) => {
         throw new Error(`Failed to calculate alignment: ${error.message}`);
     }
 });
+
+/**
+ * Cloud Function: calculateChekTusScore
+ * 
+ * Calculates team alignment score for a ChekTus session.
+ * Replaces any client-side calculations and enforces security.
+ * 
+ * @param {Object} data - Request data
+ * @param {string} data.sessionCode - The 5-digit ChekTus code
+ * @return {Object} { success, alignment }
+ */
+exports.calculateChekTusScore = onCall(async (request) => {
+    const { sessionCode } = request.data;
+    const uid = request.auth?.uid;
+
+    if (!sessionCode || !uid) {
+        throw new Error("Invalid input: sessionCode and authenticated user required");
+    }
+
+    try {
+        const db = admin.firestore();
+        
+        // Fetch session
+        const sessionDoc = await db.collection("CT_Sessions").doc(sessionCode).get();
+        if (!sessionDoc.exists) {
+            throw new Error("Session not found");
+        }
+        
+        const sessionData = sessionDoc.data();
+        
+        // Verify host
+        if (sessionData.hostUid !== uid) {
+            throw new Error("Only the host can calculate the score");
+        }
+
+        const participants = sessionData.participants || [];
+        if (participants.length < 2) {
+            throw new Error("Need at least 2 participants for a calculation");
+        }
+
+        // Fetch all participant profiles
+        let profilesData = [];
+        
+        // Sequential query because participant array is small (<= 10)
+        for (const participantUid of participants) {
+            const profileSnapshot = await db
+                .collection("profiles")
+                .where("userId", "==", participantUid)
+                .get();
+                
+            if (!profileSnapshot.empty) {
+                // Sort in memory to bypass the Firebase Composite Index requirement
+                const docs = profileSnapshot.docs.map(d => d.data());
+                docs.sort((a,b) => {
+                    const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+                    const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+                    return timeB - timeA;
+                });
+                
+                const pd = docs[0];
+                if (pd.rankedScores && pd.rankedScores.length === 9) {
+                    profilesData.push(pd.rankedScores);
+                }
+            }
+        }
+
+        if (profilesData.length < 2) {
+            throw new Error("Not enough valid profiles found among participants");
+        }
+
+        // Calculate Team Alignment (Average Pearson Correlation)
+        let totalCorrelation = 0;
+        let pairCount = 0;
+
+        for (let i = 0; i < profilesData.length; i++) {
+            for (let j = i + 1; j < profilesData.length; j++) {
+                const correlation = calculatePearsonCorrelation(profilesData[i], profilesData[j]);
+                totalCorrelation += correlation;
+                pairCount++;
+            }
+        }
+
+        const alignment = pairCount === 0 ? 0 : totalCorrelation / pairCount;
+
+        // Write the definitive final percentage and unlock flag directly to the session doc
+        await db.collection("CT_Sessions").doc(sessionCode).update({
+            finalScore: alignment,
+            calculationComplete: true
+        });
+
+        logger.info("ChekTus score calculated securely", {
+            sessionCode,
+            alignment,
+            participantCount: profilesData.length,
+            pairCount
+        });
+
+        return { success: true, alignment, participantCount: profilesData.length };
+
+    } catch (error) {
+        logger.error("Error calculating ChekTus score", { error, sessionCode });
+        throw new Error(`Failed to calculate ChekTus score: ${error.message}`);
+    }
+});
