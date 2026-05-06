@@ -588,6 +588,7 @@ main {
   background: none;
   border: 1px solid var(--text-secondary);
   color: var(--text-secondary);
+  font-family: inherit;
   padding: 0.6rem 1.2rem;
   border-radius: 20px;
   cursor: pointer;
@@ -850,14 +851,15 @@ main {
 }
 
 .chektus-trigger-button {
+  background-color: var(--gold-accent);
+  color: var(--dark-background);
   border-color: var(--gold-accent);
-  color: var(--gold-accent);
   font-weight: bold;
 }
 
 .chektus-trigger-button:hover {
-  background-color: var(--gold-accent);
-  color: var(--dark-background);
+  background-color: transparent;
+  color: var(--gold-accent);
   border-color: var(--gold-accent);
 }
 

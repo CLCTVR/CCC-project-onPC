@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
 import logoSrc from './assets/logo.png';
 import StarIcon from './assets/icon-star.svg?react';
+import ReactMarkdown from 'react-markdown';
 
 // Firebase is loaded globally via <script> tags in index.html
 declare const firebase: any;
@@ -164,13 +165,13 @@ const WelcomeScreen = ({ onStart }: { onStart: () => void }) => (
         <h2 style={{ marginBottom: '0.25rem' }}>Find Where You Belong</h2>
         <p style={{ fontWeight: 'normal', marginTop: '0', fontSize: '1.4rem', color: 'white' }}>(in 60 seconds)</p>
         <p>
-            Think of the one person who really gets you.
+            Think of your #1 BEST FRIEND.
             <br />
-            Whoever comes to mind first, that's the one.
+            Whoever comes to mind first, that's the one!
             <br />
-            Hold that image and answer 7 quick questions
+            Describe this BEST FRIEND’s choices in 7 clicks
             <br />
-            for this BEST FRIEND.
+            - and unlock your hidden Values Profile and Star.
         </p>
         <button onClick={onStart} className="cta-button">I am ready to answer for my Best Friend</button>
         <p style={{ fontSize: '0.9em' }}>
@@ -423,9 +424,9 @@ const AuthScreen = ({ setAuthError, authError, onBack, onSuccessfulVerifiedLogin
 
     const getTitle = () => {
         if (!showEmailAuth) {
-             if (authOrigin === 'welcome') return 'Welcome Back';
-             if (authOrigin === 'anonymousPreview') return 'Sign in to save your Profile';
-             return 'Sign in to see your Results';
+            if (authOrigin === 'welcome') return 'Welcome Back';
+            if (authOrigin === 'anonymousPreview') return 'Sign in to save your Profile';
+            return 'Sign in to see your Results';
         }
         if (mode === 'register') return 'Create Your Account';
         if (mode === 'login') return 'Welcome Back';
@@ -447,9 +448,9 @@ const AuthScreen = ({ setAuthError, authError, onBack, onSuccessfulVerifiedLogin
                 {!showEmailAuth ? (
                     <div className="google-auth-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', gap: '1rem', marginTop: '1.5rem' }}>
                         <p style={{ margin: '-1rem 0 0.5rem 0', color: 'var(--text-secondary)', fontSize: '0.95rem', textAlign: 'center' }}>
-                            {authOrigin === 'welcome' ? 'Sign in to view your dashboard and the Truvtus MAPP.' : 
-                             authOrigin === 'anonymousPreview' ? 'and access the Truvtus MAPP.' : 
-                             'Sign in to save your results and access the Truvtus MAPP.'}
+                            {authOrigin === 'welcome' ? 'Sign in to view your dashboard and the Truvtus MAPP.' :
+                                authOrigin === 'anonymousPreview' ? 'and access the Truvtus MAPP.' :
+                                    'Sign in to save your results and access the Truvtus MAPP.'}
                         </p>
 
                         <button
@@ -592,7 +593,7 @@ const ErrorScreen = ({ message, onLogout }: { message: string; onLogout: () => v
 
 type ResultsScreenProps = {
     optionalInfo: OptionalInfo;
-    profileData: { rankedScores: number[], starCoords: StarCoords, profileCode?: string } | null;
+    profileData: { rankedScores: number[], starCoords: StarCoords, profileCode?: string, aiAnalysis?: string } | null;
     profileInfo: ProfileInfo | null;
     onForget: () => void;
     notification: string | null;
@@ -616,6 +617,23 @@ const ResultsScreen = ({ optionalInfo, profileData, profileInfo, onForget, notif
     const [allStars, setAllStars] = useState<(StarCoords & { teamCode?: string | null, userId?: string | null, createdAt?: any, animationDelay: string, animationDuration: string })[]>([]);
     const [isMapLoading, setIsMapLoading] = useState(false);
     const [mapError, setMapError] = useState<string | null>(null);
+    const [showAnalysis, setShowAnalysis] = useState(false);
+    const [localAiAnalysis, setLocalAiAnalysis] = useState<string | null>(profileData?.aiAnalysis || null);
+
+    // Listen to the profile document for changes to aiAnalysis if it's missing
+    useEffect(() => {
+        if (!localAiAnalysis && profileInfo?.id) {
+            const unsubscribe = db.collection('profiles').doc(profileInfo.id).onSnapshot((doc: any) => {
+                if (doc.exists) {
+                    const data = doc.data();
+                    if (data.aiAnalysis) {
+                        setLocalAiAnalysis(data.aiAnalysis);
+                    }
+                }
+            });
+            return () => unsubscribe();
+        }
+    }, [localAiAnalysis, profileInfo?.id]);
 
     // --- ChekTus State ---
     const [activeSessionCode, setActiveSessionCode] = useState<string | null>(null);
@@ -628,31 +646,31 @@ const ResultsScreen = ({ optionalInfo, profileData, profileInfo, onForget, notif
 
     useEffect(() => {
         if (!ctSessionData || !ctSessionData.participants) return;
-        
+
         let isMounted = true;
         const fetchParticipantStars = async () => {
-             const stars: StarCoords[] = [];
-             for (const uid of ctSessionData.participants) {
-                 if (uid === user?.uid) continue; // we already render ourselves
-                 
-                 try {
-                     const snap = await db.collection("profiles").where("userId", "==", uid).get();
-                     if (!snap.empty) {
-                         const docs = snap.docs.map((d: any) => d.data());
-                         docs.sort((a: any,b: any) => {
-                              const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
-                              const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
-                              return timeB - timeA;
-                         });
-                         if (docs[0].starCoords) {
-                             stars.push(docs[0].starCoords);
-                         }
-                     }
-                 } catch (e) {
-                     console.warn("Could not fetch participant star", e);
-                 }
-             }
-             if (isMounted) setParticipantStars(stars);
+            const stars: StarCoords[] = [];
+            for (const uid of ctSessionData.participants) {
+                if (uid === user?.uid) continue; // we already render ourselves
+
+                try {
+                    const snap = await db.collection("profiles").where("userId", "==", uid).get();
+                    if (!snap.empty) {
+                        const docs = snap.docs.map((d: any) => d.data());
+                        docs.sort((a: any, b: any) => {
+                            const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+                            const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+                            return timeB - timeA;
+                        });
+                        if (docs[0].starCoords) {
+                            stars.push(docs[0].starCoords);
+                        }
+                    }
+                } catch (e) {
+                    console.warn("Could not fetch participant star", e);
+                }
+            }
+            if (isMounted) setParticipantStars(stars);
         };
         fetchParticipantStars();
         return () => { isMounted = false; };
@@ -718,7 +736,7 @@ const ResultsScreen = ({ optionalInfo, profileData, profileInfo, onForget, notif
             const docRef = db.collection("CT_Sessions").doc(code);
             const docSnap = await docRef.get();
             if (!docSnap.exists) throw new Error("Session not found.");
-            
+
             const data = docSnap.data();
 
             // Explicitly check TTL before joining to show error in popup instantly
@@ -952,7 +970,7 @@ const ResultsScreen = ({ optionalInfo, profileData, profileInfo, onForget, notif
                             }}
                         ></div>
                     ))}
-                    
+
                     {/* The explicitly targeted ChekTus participants (Golden Stars) */}
                     {participantStars.map((star, i) => (
                         <div key={`p-${i}`} className="team-star-container" style={getStarPosition(star.x, star.y, containerSize.width)}>
@@ -969,11 +987,11 @@ const ResultsScreen = ({ optionalInfo, profileData, profileInfo, onForget, notif
             </div>
 
             <div style={{ marginTop: '1.5rem', width: '100%', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center' }}>
-                
+
                 {/* --- START: ChekTus UI Logic --- */}
                 {activeSessionCode && ctSessionData ? (
                     ctSessionData.calculationComplete ? (
-                        <button 
+                        <button
                             className="starmap-toggle-button"
                             style={{ backgroundColor: getChekTusColor(ctSessionData.finalScore), color: '#333', fontWeight: 'bold' }}
                             disabled
@@ -993,7 +1011,11 @@ const ResultsScreen = ({ optionalInfo, profileData, profileInfo, onForget, notif
                         </div>
                     )
                 ) : (
-                    <button className="starmap-toggle-button chektus-trigger-button" onClick={() => setCtModalVisible(true)}>
+                    <button 
+                        className="starmap-toggle-button chektus-trigger-button" 
+                        onClick={() => setCtModalVisible(true)}
+                        title="Check your fit"
+                    >
                         ChekTus
                     </button>
                 )}
@@ -1003,26 +1025,26 @@ const ResultsScreen = ({ optionalInfo, profileData, profileInfo, onForget, notif
                     <div className="chektus-modal-overlay">
                         <div className="chektus-modal">
                             <h3>ChekTus</h3>
-                            <button className="gold-cta-button" onClick={handleCreateSession} disabled={ctLoading} style={{width: '100%'}}>
+                            <button className="gold-cta-button" onClick={handleCreateSession} disabled={ctLoading} style={{ width: '100%' }}>
                                 Start New Session
                             </button>
-                            <p style={{margin: '1rem 0'}}>— OR —</p>
-                            <input 
-                                type="text" 
-                                placeholder="Enter 4-digit code" 
+                            <p style={{ margin: '1rem 0' }}>— OR —</p>
+                            <input
+                                type="text"
+                                placeholder="Enter 4-digit code"
                                 maxLength={4}
-                                value={joinCodeInput} 
+                                value={joinCodeInput}
                                 onChange={e => {
                                     const val = e.target.value.replace(/\D/g, ''); // only allow digits
                                     setJoinCodeInput(val);
                                 }}
-                                style={{textAlign: 'center', letterSpacing: '2px', padding: '0.6rem'}}
+                                style={{ textAlign: 'center', letterSpacing: '2px', padding: '0.6rem' }}
                             />
-                            <button className="link-button" onClick={handleJoinSession} disabled={ctLoading || joinCodeInput.length !== 4} style={{marginTop: '0.5rem', backgroundColor: '#333', color: 'white', padding: '0.6rem', borderRadius: '4px'}}>
+                            <button className="link-button" onClick={handleJoinSession} disabled={ctLoading || joinCodeInput.length !== 4} style={{ marginTop: '0.5rem', backgroundColor: '#333', color: 'white', padding: '0.6rem', borderRadius: '4px' }}>
                                 Join Session
                             </button>
                             {ctError && <p className="error-message">{ctError}</p>}
-                            <button className="link-button" onClick={() => { setCtModalVisible(false); setCtError(''); }} style={{marginTop: '1rem'}}>Cancel</button>
+                            <button className="link-button" onClick={() => { setCtModalVisible(false); setCtError(''); }} style={{ marginTop: '1rem' }}>Cancel</button>
                         </div>
                     </div>
                 )}
@@ -1032,9 +1054,32 @@ const ResultsScreen = ({ optionalInfo, profileData, profileInfo, onForget, notif
                     href="https://map.truvtus.com"
                     className="cta-button"
                     style={{ textDecoration: 'none', width: 'fit-content', padding: '0.6rem 2rem', fontSize: '0.9rem', border: '1px solid transparent' }}
+                    title="Venues you'll love"
                 >
-                    Go to MAPP
+                    MAPP
                 </a>
+
+                <div style={{ width: '100%', marginTop: '1.5rem', marginBottom: '0.5rem' }}>
+                    <button 
+                        onClick={() => setShowAnalysis(true)} 
+                        className="cta-button"
+                        style={{ backgroundColor: '#6c2bd9', borderColor: '#5b21b6', width: '100%', display: showAnalysis ? 'none' : 'block' }}
+                        title="Your profile explained"
+                    >
+                        Decode Profile
+                    </button>
+                    {showAnalysis && (
+                        <div className="ai-analysis-container" style={{ padding: '1.5rem', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '8px', textAlign: 'left', border: '1px solid rgba(255,255,255,0.1)' }}>
+                            {localAiAnalysis ? (
+                                <div className="prose prose-invert max-w-none ai-report">
+                                    <ReactMarkdown>{localAiAnalysis}</ReactMarkdown>
+                                </div>
+                            ) : (
+                                <p style={{ color: '#aaa', fontStyle: 'italic', textAlign: 'center', margin: 0 }}>Decoding your profile... Please wait.</p>
+                            )}
+                        </div>
+                    )}
+                </div>
 
                 {profileInfo && (
                     <div className="profile-actions" style={{ width: '100%', marginTop: '1rem' }}>
@@ -1265,7 +1310,7 @@ const App = () => {
     const [screen, setScreen] = useState<Screen>('welcome');
     const [answers, setAnswers] = useState<number[]>(Array(QUESTIONS.length).fill(50));
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-    const [profileData, setProfileData] = useState<{ rankedScores: number[], starCoords: StarCoords, profileCode?: string } | null>(null);
+    const [profileData, setProfileData] = useState<{ rankedScores: number[], starCoords: StarCoords, profileCode?: string, aiAnalysis?: string } | null>(null);
     const [optionalInfo, setOptionalInfo] = useState<OptionalInfo>({ name: '', birthYear: '', education: '', source: '', teamCode: '' });
     const [isSaving, setIsSaving] = useState(false);
     const [authOrigin, setAuthOrigin] = useState<'welcome' | 'optionalInfo' | 'anonymousPreview'>('welcome');
@@ -1330,7 +1375,8 @@ const App = () => {
                     setProfileData({
                         rankedScores: activeProfileData.rankedScores,
                         starCoords: activeProfileData.starCoords,
-                        profileCode: activeProfileData.profileCode
+                        profileCode: activeProfileData.profileCode,
+                        aiAnalysis: activeProfileData.aiAnalysis
                     });
                     setOptionalInfo(activeProfileData.optionalInfo || { name: '', birthYear: '', education: '', source: '', teamCode: '' });
                     setProfileInfo({ id: activeProfile.id, createdAt: activeProfile.createdAt });

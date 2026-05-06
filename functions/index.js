@@ -11,9 +11,14 @@
  */
 
 const { onCall } = require("firebase-functions/v2/https");
+const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { setGlobalOptions } = require("firebase-functions/v2");
+const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const logger = require("firebase-functions/logger");
+const { GoogleGenAI } = require("@google/genai");
+
+const geminiApiKey = defineSecret("GEMINI_API_KEY");
 
 // Initialize Firebase Admin SDK
 admin.initializeApp();
@@ -521,3 +526,78 @@ exports.calculateChekTusScore = onCall(async (request) => {
         throw new Error(`Failed to calculate ChekTus score: ${error.message}`);
     }
 });
+
+/**
+ * Cloud Function: generateUserProfileAnalysis
+ * 
+ * Automatically generates a personalized AI analysis when a new Q7 profile is created.
+ * Triggered by Firestore document creation in the "profiles" collection.
+ */
+exports.generateUserProfileAnalysis = onDocumentCreated(
+    {
+        document: "profiles/{profileId}",
+        secrets: [geminiApiKey]
+    },
+    async (event) => {
+        const snapshot = event.data;
+        if (!snapshot) return;
+
+        const profileData = snapshot.data();
+        if (!profileData.rankedScores || profileData.rankedScores.length !== 9) return;
+
+        try {
+            const ai = new GoogleGenAI({ apiKey: geminiApiKey.value() });
+            
+            const profilesText = `Scores: ${JSON.stringify(profileData.rankedScores)}`;
+            
+            const prompt = `
+    You are a perceptive Brand Strategist and Personality Profiler. 
+    Analyze the following Q7 Values Profile (1-10 scale) for one individual. 
+    
+    The basic values are identified as follows:
+    UN = Universalism
+    BE = Benevolence
+    TC = Tradition/Conformity
+    SE = Security
+    PO = Power
+    AC = Achievement
+    HE = Hedonism
+    ST = Stimulation
+    SD = Self-Direction 
+
+    Data: ${profilesText}
+
+    TASK: Write a direct, punchy report (Max 250 words) addressing the user as "You."
+    CRITICAL INSTRUCTION: Do NOT include any academic citations (e.g., Schwartz, Maslow). Use their logic silently to frame every score as a specialized advantage. Format the output in Markdown. Do not include introductory or concluding conversational filler, just the report. No headings, just split the report into paragraphs (by section).
+
+    Structure:
+    1. **The Opening**: Start with exactly: "You look to me as [The Persona Title]" (e.g., The Principled Maverick, The Focused Architect, The Social Catalyst).
+    2. **The Vibe**: 2 sentences on their core essence. Make it sound like a rare and valuable perspective.
+    3. **The Superpower**: Highlight their highest value scores as a unique competitive edge in work and life.
+    4. **The Specialist’s Trade-off**: Reframe their lowest scores as "Strategic Focus." Explain how they prioritize specific outcomes over distractions (e.g., "You trade unnecessary novelty for deep, disciplined execution").
+    5. **Recommendation**: List roles the person would excel at and roles to avoid. 
+    6. **The Third Place Add-on**: Position this as a seamless bonus recommendation. Open exactly with "If you are looking for a cafe or a third place, I recommend " and seamlessly blend in one of the following vibes WITHOUT using any quotation marks around the vibe:
+       - an open-concept, industrial-chic space designed for deep focus.
+       - a cozy, neighborhood hub with a communal, living room energy.
+       - a sleek, high-energy hub or refined environment where ambition is in the air.
+    6. **The Signature Closure**: End exactly with this text (including the markdown link): 
+       "When you get there, compare your profile with other patrons, use ChekTus to gauge your alignment—and absolutely like the place on the [MAPP](https://map.truvtus.com)."
+
+    Tone: Sophisticated, empowering, and direct.
+  `;
+            
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: prompt,
+            });
+            
+            const aiAnalysis = response.text || "No analysis generated.";
+            
+            await snapshot.ref.update({ aiAnalysis });
+            logger.info("AI Analysis generated and saved successfully", { profileId: event.params.profileId });
+        } catch (error) {
+            logger.error("Error generating AI analysis", { error: error.message, profileId: event.params.profileId });
+        }
+    }
+);
+

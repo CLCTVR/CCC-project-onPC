@@ -7,6 +7,11 @@
 ---
 
 ### Version History
+*   **v1.14 (2026-05-05):**
+    *   **New Feature:** Implemented **AI-Driven Profile Decoding**. Users can now click "Decode Profile" on the Results Screen to receive a personalized, 250-word narrative analysis of their Q7 scores.
+    *   **Backend Architecture:** Deployed a new Firebase Cloud Function (`generateUserProfileAnalysis`) leveraging the `@google/genai` SDK and the Gemini 2.5 Flash model. The function uses an `onDocumentCreated` background trigger to generate the analysis upon profile creation, saving the output securely as a Markdown string under the `aiAnalysis` field.
+    *   **Security:** API keys and prompt engineering are completely isolated on the server-side to protect intellectual property and manage API costs efficiently.
+    *   **UI/UX Polish:** Integrated `react-markdown` to beautifully render the AI response. Cleaned up the Results Screen typography, changed "Go to MAPP" label to "MAPP", normalized the ChekTus button's CSS hover state to match brand guidelines, and added native tooltips (title attributes) across the primary Call-To-Action buttons.
 *   **v1.13 (2026-04-14):**
     *   **New Feature:** Integrated **ChekTus v2.1** (Group Alignment Utility). Replaced the legacy StarMap toggle with a dedicated algorithmic session management interface.
     *   **Backend Architecture:** Deployed a new Cloud Function (`calculateChekTusScore`) to execute proprietary Pearson correlation arrays strictly server-side.
