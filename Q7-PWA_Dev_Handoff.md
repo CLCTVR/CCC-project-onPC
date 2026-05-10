@@ -14,8 +14,6 @@
     *   **Credential Rotation:** Successfully revoked the compromised Service Account key (`40b2bc51d`) and moved all public-facing keys to domain-restricted HTTP Referrer policies (`*.truvtus.com`).
     *   **Infrastructure:** Established a $10 billing budget alert as a final safety net for the project.
 *   **v1.14 (2026-05-05):**
-
-*   **v1.14 (2026-05-05):**
     *   **New Feature:** Implemented **AI-Driven Profile Decoding**. Users can now click "Decode Profile" on the Results Screen to receive a personalized, 250-word narrative analysis of their Q7 scores.
     *   **Backend Architecture:** Deployed a new Firebase Cloud Function (`generateUserProfileAnalysis`) leveraging the `@google/genai` SDK and the Gemini 2.5 Flash model. The function uses an `onDocumentCreated` background trigger to generate the analysis upon profile creation, saving the output securely as a Markdown string under the `aiAnalysis` field.
     *   **Security:** API keys and prompt engineering are completely isolated on the server-side to protect intellectual property and manage API costs efficiently.
