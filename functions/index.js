@@ -10,7 +10,7 @@
  * 3. calculateVenueAlignment - Calculates user-venue compatibility
  */
 
-const { onCall } = require("firebase-functions/v2/https");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { defineSecret } = require("firebase-functions/params");
@@ -186,11 +186,36 @@ exports.processQ7Assessment = onCall(async (request) => {
         throw new Error("Invalid input: answers must be an array of 7 numbers");
     }
 
-    if (!userId) {
-        throw new Error("Invalid input: userId is required");
+    const uid = request.auth?.uid;
+    if (!uid) {
+        throw new Error("Authentication required: You must be logged in to create a profile.");
+    }
+
+    if (uid !== userId) {
+        throw new Error("Permission denied: You can only create a profile for your own UID.");
     }
 
     try {
+        const db = admin.firestore();
+
+        // --- UID-Based Rate Limiting ---
+        // Limit to 3 profiles per hour to prevent bot loops and budget drain.
+        const oneHourAgo = new Date(Date.now() - 3600000);
+        const recentProfilesSnapshot = await db.collection("profiles")
+            .where("userId", "==", uid)
+            .where("createdAt", ">=", oneHourAgo)
+            .count()
+            .get();
+        
+        const profileCount = recentProfilesSnapshot.data().count;
+        if (profileCount >= 3) {
+            logger.warn("Rate limit exceeded for profile creation", { userId: uid, count: profileCount });
+            throw new HttpsError(
+                'resource-exhausted', 
+                'Rate limit exceeded: You can only create 3 profiles per hour. Please wait and try again later.'
+            );
+        }
+
         // Calculate profile using proprietary algorithm
         const { rankedScores, starCoords } = calculateProfile(answers);
         const profileCode = generateProfileCode(rankedScores);
@@ -211,7 +236,6 @@ exports.processQ7Assessment = onCall(async (request) => {
         };
 
         // Write to Firestore using Admin SDK (bypasses security rules)
-        const db = admin.firestore();
         const profileRef = await db.collection("profiles").add(profileData);
 
         // Also write to publicStars for StarMap feature
@@ -237,8 +261,12 @@ exports.processQ7Assessment = onCall(async (request) => {
             starCoords,
         };
     } catch (error) {
+        // If it's already an HttpsError (like our Rate Limit), throw it directly
+        if (error instanceof HttpsError || (error.code && error.httpErrorCode)) {
+            throw error;
+        }
         logger.error("Error processing Q7 assessment", { error, userId });
-        throw new Error(`Failed to process assessment: ${error.message}`);
+        throw new HttpsError('internal', `Failed to process assessment: ${error.message}`);
     }
 });
 
@@ -257,9 +285,17 @@ exports.processQ7Assessment = onCall(async (request) => {
 exports.updateVenueProfile = onCall(async (request) => {
     const { venueId, userId } = request.data;
 
-    // Validate inputs
+    const uid = request.auth?.uid;
+    if (!uid) {
+        throw new Error("Authentication required: You must be logged in to update a venue profile.");
+    }
+
     if (!venueId || !userId) {
         throw new Error("Invalid input: venueId and userId are required");
+    }
+
+    if (uid !== userId) {
+        throw new Error("Permission denied: You can only update a venue profile for your own UID.");
     }
 
     try {
@@ -363,9 +399,18 @@ exports.updateVenueProfile = onCall(async (request) => {
 exports.calculateVenueAlignment = onCall(async (request) => {
     const { userId, venueId } = request.data;
 
+    const uid = request.auth?.uid;
+    if (!uid) {
+        throw new Error("Authentication required: You must be logged in to calculate alignment.");
+    }
+
     // Validate inputs
     if (!userId || !venueId) {
         throw new Error("Invalid input: userId and venueId are required");
+    }
+
+    if (uid !== userId) {
+        throw new Error("Permission denied: You can only calculate alignment for your own UID.");
     }
 
     try {
@@ -601,3 +646,4 @@ exports.generateUserProfileAnalysis = onDocumentCreated(
     }
 );
 
+// Force redeploy
