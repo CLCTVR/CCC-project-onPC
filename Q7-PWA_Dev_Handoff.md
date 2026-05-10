@@ -7,6 +7,14 @@
 ---
 
 ### Version History
+*   **v1.15 (2026-05-10):**
+    *   **SECURITY HARDENING:** Implemented a real-time "Shield" in the `processQ7Assessment` Cloud Function to prevent budget-draining bot attacks. 
+    *   **Rate Limiting:** Introduced a mandatory limit of **3 profile creations per hour per UID**. Requests exceeding this are blocked server-side with a `resource-exhausted` error.
+    *   **Mandatory Authentication:** All cloud-side calculations now strictly enforce `request.auth` checks. Anonymous sessions are still supported but must be initiated via Firebase Auth to proceed.
+    *   **Credential Rotation:** Successfully revoked the compromised Service Account key (`40b2bc51d`) and moved all public-facing keys to domain-restricted HTTP Referrer policies (`*.truvtus.com`).
+    *   **Infrastructure:** Established a $10 billing budget alert as a final safety net for the project.
+*   **v1.14 (2026-05-05):**
+
 *   **v1.14 (2026-05-05):**
     *   **New Feature:** Implemented **AI-Driven Profile Decoding**. Users can now click "Decode Profile" on the Results Screen to receive a personalized, 250-word narrative analysis of their Q7 scores.
     *   **Backend Architecture:** Deployed a new Firebase Cloud Function (`generateUserProfileAnalysis`) leveraging the `@google/genai` SDK and the Gemini 2.5 Flash model. The function uses an `onDocumentCreated` background trigger to generate the analysis upon profile creation, saving the output securely as a Markdown string under the `aiAnalysis` field.
@@ -141,8 +149,9 @@ The application includes user authentication, allowing users to save their profi
 **Client-Side Integration:**
 - Q7-PWA calls `processQ7Assessment` via `firebase.functions().httpsCallable()`
 - Q7-FIKA calls `updateVenueProfile` and `calculateVenueAlignment` for map features
-- All functions are publicly callable (required for new user registration)
-- Expected latency: ~200-500ms per Cloud Function call
+- **AUTHENTICATION:** All functions now require valid Firebase Authentication (UID). Unauthenticated requests are rejected immediately.
+- **RATE LIMITING:** `processQ7Assessment` is limited to 3 executions per hour per user to prevent automated abuse.
+- Expected latency: ~2-3 seconds for AI analysis; ~200-500ms for core calculations.
 
 #### Profile Distortion Index
 **Purpose:** Identifies potentially unreliable or rushed responses by measuring profile smoothness.
