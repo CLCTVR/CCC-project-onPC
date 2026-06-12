@@ -646,4 +646,83 @@ exports.generateUserProfileAnalysis = onDocumentCreated(
     }
 );
 
+
+/**
+ * Cloud Function: analyzeTeamDynamics
+ * 
+ * Generates team dynamics AI analysis using Gemini.
+ * Accessible only by administrators (clctvr@gmail.com).
+ */
+exports.analyzeTeamDynamics = onCall({
+    secrets: [geminiApiKey]
+}, async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) {
+        throw new HttpsError('unauthenticated', 'Authentication required: You must be logged in to analyze team dynamics.');
+    }
+
+    const email = request.auth?.token?.email;
+    if (email !== 'clctvr@gmail.com') {
+        throw new HttpsError('permission-denied', 'Permission denied: Only administrators can generate team dynamics analysis.');
+    }
+
+    const { users } = request.data;
+    if (!users || !Array.isArray(users)) {
+        throw new HttpsError('invalid-argument', 'Invalid argument: users must be an array of user profiles.');
+    }
+
+    try {
+        const ai = new GoogleGenAI({ apiKey: geminiApiKey.value() });
+
+        const profilesText = users.map(u => {
+            return `Name: ${u.name}, Scores: ${JSON.stringify(u.values)}`;
+        }).join('\n');
+
+        const prompt = `
+    You are an expert Organizational Psychologist analyzing a team's Q7 Values Profile data. 
+    The Q7 Culture Compass tool is based on the Theory of Basic Human Values by Shalom Schwartz. 
+    In the Q7 output, the basic values are identified as follows:
+    UN = Universalism
+    BE = Benevolence
+    TC = Tradition/Conformity
+    SE = Security
+    PO = Power
+    AC = Achievement
+    HE = Hedonism
+    ST = Stimulation
+    SD = Self-Direction 
+
+    
+    Here are the profiles for a team of ${users.length} people. 
+    The values (UN, BE, TC, SE, PO, AC, HE, ST, SD) are scored on a scale of 1-10.
+    
+    ${profilesText}
+
+    Please provide a concise analysis, using Schwartz Value scores, and supported when relevant by Maslow, Oldenburg, Csikszentmihalyi, Hofstede, Schein, and Kahneman.:
+    Stucture the response using the following 5 sections, Max 300 words:
+    1. Culture: Dominant Schwartz quadrant and dominant values, and Schein "Basic Assumptions."
+    2. Blind Spots: Low-score risks and Hofstede dimensions.
+    3. Conflicts: Friction points (System 1 triggers) and Power Distance.
+    4. Recommendation: One actionable Person-to-Organization (P2O) strategy for Flow and Social Capital.
+    5. Depending on the context, this section is an assessment of:
+    - If 1 profile: Ideal vs. high-friction jobs.
+    - If 2 profiles: Partnership prospects.
+    - If Team: Organizational health & Third Place functionality.
+    Ensure nomenclature adherence. Format the output in Markdown, with section titles in bold font.
+  `;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+        });
+
+        return {
+            analysis: response.text || "No analysis generated."
+        };
+    } catch (error) {
+        logger.error("Error analyzing team dynamics", { error: error.message, userId: uid });
+        throw new HttpsError('internal', `Failed to generate team dynamics analysis: ${error.message}`);
+    }
+});
+
 // Force redeploy
