@@ -7,6 +7,12 @@
 ---
 
 ### Version History
+*   **v1.16 (2026-06-13):**
+    *   **SECURITY HARDENING (Firestore Rules Patch):** Patched `firestore.rules` to remove client-side `allow create` permissions from the `profiles` collection, closing a backdoor bypass where direct client writes could trigger unchecked Gemini API analysis generation.
+    *   **Secret Manager Migration:** Configured and deployed `GEMINI_API_KEY` (Version 5) in GCP Secret Manager, securely accessed via backend Cloud Functions.
+    *   **Deployment & Integration:** Deployed all 6 Cloud Functions and the PWA hosting to Firebase.
+    *   **Local Emulator Testing:** Added `functions/tests/test-team-dynamics.js` to enable developers to perform safe, authenticated local testing of `analyzeTeamDynamics` using mock JWTs.
+    *   **Codebase Cleanup:** Cleaned up obsolete configuration files (`vite.config - backup.ts`).
 *   **v1.15 (2026-05-10):**
     *   **SECURITY HARDENING:** Implemented a real-time "Shield" in the `processQ7Assessment` Cloud Function to prevent budget-draining bot attacks. 
     *   **Rate Limiting:** Introduced a mandatory limit of **3 profile creations per hour per UID**. Requests exceeding this are blocked server-side with a `resource-exhausted` error.
