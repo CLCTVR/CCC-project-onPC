@@ -206,12 +206,12 @@ exports.processQ7Assessment = onCall(async (request) => {
             .where("createdAt", ">=", oneHourAgo)
             .count()
             .get();
-        
+
         const profileCount = recentProfilesSnapshot.data().count;
         if (profileCount >= 3) {
             logger.warn("Rate limit exceeded for profile creation", { userId: uid, count: profileCount });
             throw new HttpsError(
-                'resource-exhausted', 
+                'resource-exhausted',
                 'Rate limit exceeded: You can only create 3 profiles per hour. Please wait and try again later.'
             );
         }
@@ -488,15 +488,15 @@ exports.calculateChekTusScore = onCall(async (request) => {
 
     try {
         const db = admin.firestore();
-        
+
         // Fetch session
         const sessionDoc = await db.collection("CT_Sessions").doc(sessionCode).get();
         if (!sessionDoc.exists) {
             throw new Error("Session not found");
         }
-        
+
         const sessionData = sessionDoc.data();
-        
+
         // Verify host
         if (sessionData.hostUid !== uid) {
             throw new Error("Only the host can calculate the score");
@@ -509,23 +509,23 @@ exports.calculateChekTusScore = onCall(async (request) => {
 
         // Fetch all participant profiles
         let profilesData = [];
-        
+
         // Sequential query because participant array is small (<= 10)
         for (const participantUid of participants) {
             const profileSnapshot = await db
                 .collection("profiles")
                 .where("userId", "==", participantUid)
                 .get();
-                
+
             if (!profileSnapshot.empty) {
                 // Sort in memory to bypass the Firebase Composite Index requirement
                 const docs = profileSnapshot.docs.map(d => d.data());
-                docs.sort((a,b) => {
+                docs.sort((a, b) => {
                     const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
                     const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
                     return timeB - timeA;
                 });
-                
+
                 const pd = docs[0];
                 if (pd.rankedScores && pd.rankedScores.length === 9) {
                     profilesData.push(pd.rankedScores);
@@ -592,9 +592,9 @@ exports.generateUserProfileAnalysis = onDocumentCreated(
 
         try {
             const ai = new GoogleGenAI({ apiKey: geminiApiKey.value() });
-            
+
             const profilesText = `Scores: ${JSON.stringify(profileData.rankedScores)}`;
-            
+
             const prompt = `
     You are a perceptive Brand Strategist and Personality Profiler. 
     Analyze the following Q7 Values Profile (1-10 scale) for one individual. 
@@ -630,14 +630,14 @@ exports.generateUserProfileAnalysis = onDocumentCreated(
 
     Tone: Sophisticated, empowering, and direct.
   `;
-            
+
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: prompt,
             });
-            
+
             const aiAnalysis = response.text || "No analysis generated.";
-            
+
             await snapshot.ref.update({ aiAnalysis });
             logger.info("AI Analysis generated and saved successfully", { profileId: event.params.profileId });
         } catch (error) {
